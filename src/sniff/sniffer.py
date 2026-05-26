@@ -43,7 +43,7 @@ def sniff_file(path: str) -> Tuple[str, str, float]:
 
     # ── .sql 扩展名: 优先确认 SQL 文本 ──
     if ext == "sql" and regex_search(
-        text, r"\b(create\s+table|insert\s+into|drop\s+table)\b", re.IGNORECASE
+        r"\b(create\s+table|insert\s+into|drop\s+table)\b", text, re.IGNORECASE
     ):
         return ("sql", enc, 0.95)
 

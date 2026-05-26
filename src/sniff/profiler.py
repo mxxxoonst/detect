@@ -8,8 +8,12 @@ from src.sniff.sniffer import sniff_file
 from src.utils.file_utils import walk_files, extension
 
 
-def profile_corpus(root: str) -> Dict[str, Any]:
+def profile_corpus(root: str, files: list | None = None) -> Dict[str, Any]:
     """遍历目录, 对全部文件做嗅探, 产出交叉表和分布。
+
+    Args:
+        root: 语料库根路径 (用于日志/调试)
+        files: 可选的文件列表, 提供时直接使用而非 walk_files
 
     Returns:
         {
@@ -23,7 +27,8 @@ def profile_corpus(root: str) -> Dict[str, Any]:
     format_dist: Counter = Counter()
     low_confidence: List[Tuple[str, str, float]] = []
 
-    for path in walk_files(root):
+    it: list = files if files is not None else list(walk_files(root))
+    for path in it:
         fmt, enc, conf = sniff_file(path)
         ext = extension(path)
         cross_table[(ext, fmt)] += 1

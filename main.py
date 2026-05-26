@@ -18,28 +18,88 @@ from src.sniff.sniffer import sniff_file
 from src.parse.grade import grade_parse
 from src.extract.extractor import extract_five_infos
 from src.utils.file_utils import walk_files
+from src.utils.logger import setup_logger
 
 
 def cmd_sniff(args):
     """阶段0: 产出交叉表."""
-    print(f"[阶段0] 内容嗅探: {args.root}")
+    log = setup_logger("sniff", file=args.output_file)
+    paths = resolve_input(args.root, log)
+
+    if not paths:
+        log.error("未找到可嗅探的文件, 跳过阶段0")
+        return
+
+    log.info("[阶段0] 内容嗅探: %s (文件数: %d)", args.root, len(paths))
     start = time.time()
-    result = profile_corpus(args.root)
+    result = profile_corpus(args.root, files=paths)
     elapsed = time.time() - start
 
     _print_sniff_report(result, elapsed)
     _save_output(result, "sniff_report.json", args.output_dir)
+    log.info("阶段0 完成")
+
+
+def resolve_input(root: str, log) -> list:
+    """宽限输入解析: 支持文件/目录, 目录递归查找文件.
+
+    - 如果是文件, 直接返回 [path]
+    - 如果是目录, 递归遍历所有文件
+    - 如果目录为空(无任何文件), 向上递归父目录继续查找
+    - 如果仍无文件, 逐层检查祖父目录, 直到根目录
+    - 若全程无文件, 返回空列表并记录警告
+
+    Returns:
+        找到的文件路径列表
+    """
+    root = os.path.abspath(root)
+
+    # 单文件: 直接返回
+    if os.path.isfile(root):
+        log.debug("输入为单文件: %s", root)
+        return [root]
+
+    if not os.path.isdir(root):
+        log.error("输入路径不存在: %s", root)
+        return []
+
+    # 目录: 递归查找所有文件
+    files = list(walk_files(root))
+    if files:
+        log.debug("目录 %s 下找到 %d 个文件", root, len(files))
+        return files
+
+    # 目录为空: 向上查找父目录, 直到文件系统根
+    log.warning("目录 %s 下无文件, 向上查找父目录 ...", root)
+    current = root
+    while current != os.path.dirname(current):  # 未到文件系统根
+        parent = os.path.dirname(current)
+        parent_files = list(walk_files(parent))
+        if parent_files:
+            log.info("在父目录 %s 中找到 %d 个文件", parent, len(parent_files))
+            return parent_files
+        log.warning("父目录 %s 也无文件, 继续向上 ...", parent)
+        current = parent
+
+    log.error("全程未找到任何文件")
+    return []
 
 
 def cmd_parse(args):
     """阶段1: 容错分级解析."""
-    print(f"[阶段1] 容错分级解析: {args.root}")
+    log = setup_logger("parse", file=args.output_file)
+    files = resolve_input(args.root, log)
+
+    if not files:
+        log.error("未找到可解析的文件, 跳过阶段1")
+        return
+
+    log.info("[阶段1] 容错分级解析: %s (文件数: %d)", args.root, len(files))
     start = time.time()
 
     tier1, tier2, tier3, noise, free_text = [], [], [], [], []
     errors = []
 
-    files = list(walk_files(args.root))
     total = len(files)
     for i, path in enumerate(files):
         fmt, enc, conf = sniff_file(path)
@@ -60,7 +120,7 @@ def cmd_parse(args):
             errors.append({"path": path, "error": grade.error})
 
         if (i + 1) % 100 == 0:
-            print(f"  进度: {i+1}/{total}")
+            log.info("  进度: %d/%d", i+1, total)
 
     elapsed = time.time() - start
     report = {
@@ -84,18 +144,25 @@ def cmd_parse(args):
 
 def cmd_extract(args):
     """阶段2: 五类信息提取."""
-    print(f"[阶段2] 五类信息提取: {args.root}")
+    log = setup_logger("extract", file=args.output_file)
+    files = resolve_input(args.root, log)
+
+    if not files:
+        log.error("未找到可提取的文件, 跳过阶段2")
+        return
+
+    log.info("[阶段2] 五类信息提取: %s (文件数: %d)", args.root, len(files))
     start = time.time()
 
     # 先收集 tier1 种子
     tier1_grades = []
-    for path in walk_files(args.root):
+    for path in files:
         fmt, enc, conf = sniff_file(path)
         grade = grade_parse(path, fmt, enc)
         if grade.tier == 1:
             tier1_grades.append(grade)
 
-    print(f"  tier1 种子数: {len(tier1_grades)}")
+    log.info("  tier1 种子数: %d", len(tier1_grades))
     result = extract_five_infos(tier1_grades)
     elapsed = time.time() - start
     result["elapsed_s"] = round(elapsed, 1)
@@ -106,21 +173,30 @@ def cmd_extract(args):
 
 def cmd_pipeline(args):
     """三阶段全流水线."""
-    print(f"[流水线] 全阶段执行: {args.root}")
+    log = setup_logger("pipeline", file=args.output_file)
+
+    # 宽限输入解析
+    sniff_files = resolve_input(args.root, log)
+    if not sniff_files:
+        log.error("未找到可处理的文件, 流水线终止")
+        return
+
+    log.info("[流水线] 全阶段执行: %s (文件数: %d)", args.root, len(sniff_files))
     print("=" * 60)
 
     # 阶段0
     print("\n── 阶段0: 内容嗅探 ──")
     t0 = time.time()
-    sniff_result = profile_corpus(args.root)
+    sniff_result = profile_corpus(args.root, files=sniff_files)
     _print_sniff_report(sniff_result, time.time() - t0)
+    log.info("阶段0 完成")
 
     # 阶段1
     print("\n── 阶段1: 容错分级解析 ──")
     t1 = time.time()
     tier1_grades, tier2_grades = [], []
     noise, free_text_grades = [], []
-    for path in walk_files(args.root):
+    for path in sniff_files:
         fmt, enc, conf = sniff_file(path)
         grade = grade_parse(path, fmt, enc)
         if grade.tier == 1:
@@ -132,9 +208,11 @@ def cmd_pipeline(args):
         elif grade.tier == "free_text":
             free_text_grades.append(grade)
 
-    print(f"  tier1: {len(tier1_grades)} | tier2: {len(tier2_grades)} | "
-          f"noise: {len(noise)} | free_text: {len(free_text_grades)} | "
-          f"耗时: {time.time()-t1:.1f}s")
+    log.info(
+        "  tier1: %d | tier2: %d | noise: %d | free_text: %d | 耗时: %.1fs",
+        len(tier1_grades), len(tier2_grades),
+        len(noise), len(free_text_grades), time.time()-t1,
+    )
 
     # 阶段2
     print("\n── 阶段2: 五类信息提取 ──")
@@ -144,7 +222,7 @@ def cmd_pipeline(args):
         _print_extract_report(extract_result)
     else:
         extract_result = {"note": "无 tier1 种子, 跳过提取"}
-        print("  无 tier1 种子可提取")
+        log.warning("无 tier1 种子可提取")
     extract_result["elapsed_s"] = round(time.time() - t2, 1)
 
     # 汇总
@@ -166,7 +244,7 @@ def cmd_pipeline(args):
     }
 
     _save_output(pipeline_result, "pipeline_report.json", args.output_dir)
-    print(f"\n全流水线完成, 总耗时: {total_elapsed:.1f}s")
+    log.info("全流水线完成, 总耗时: %.1fs", total_elapsed)
 
 
 # ════════════════════════════════════════════════════════════════
@@ -240,25 +318,33 @@ def main():
 
     # sniff
     p_sniff = sub.add_parser("sniff", help="阶段0: 内容嗅探 → 交叉表")
-    p_sniff.add_argument("root", help="语料库根目录")
+    p_sniff.add_argument("root", help="语料库根目录/文件")
     p_sniff.add_argument("-o", "--output-dir", default="output", help="输出目录 (默认: output)")
+    p_sniff.add_argument("-f", "--output-file", default=None, help="日志文件路径 (默认: <output-dir>/sniff.log)")
 
     # parse
     p_parse = sub.add_parser("parse", help="阶段1: 容错分级解析")
-    p_parse.add_argument("root", help="语料库根目录")
+    p_parse.add_argument("root", help="语料库根目录/文件")
     p_parse.add_argument("-o", "--output-dir", default="output", help="输出目录 (默认: output)")
+    p_parse.add_argument("-f", "--output-file", default=None, help="日志文件路径 (默认: <output-dir>/parse.log)")
 
     # extract
     p_extract = sub.add_parser("extract", help="阶段2: 五类信息提取")
-    p_extract.add_argument("root", help="语料库根目录")
+    p_extract.add_argument("root", help="语料库根目录/文件")
     p_extract.add_argument("-o", "--output-dir", default="output", help="输出目录 (默认: output)")
+    p_extract.add_argument("-f", "--output-file", default=None, help="日志文件路径 (默认: <output-dir>/extract.log)")
 
     # pipeline
     p_pipe = sub.add_parser("pipeline", help="三阶段全流水线")
-    p_pipe.add_argument("root", help="语料库根目录")
+    p_pipe.add_argument("root", help="语料库根目录/文件")
     p_pipe.add_argument("-o", "--output-dir", default="output", help="输出目录 (默认: output)")
+    p_pipe.add_argument("-f", "--output-file", default=None, help="日志文件路径 (默认: <output-dir>/pipeline.log)")
 
     args = parser.parse_args()
+
+    # 默认日志文件: 未显式指定时使用 <output-dir>/<command>.log
+    if args.command and args.output_file is None:
+        args.output_file = os.path.join(args.output_dir, f"{args.command}.log")
 
     if args.command == "sniff":
         cmd_sniff(args)
