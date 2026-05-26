@@ -1,0 +1,29 @@
+申请人张三，身份证号440106199003151234，联系电话13800001111，现居住于北京市朝阳区某某路100号。该申请人于2024年1月提交了贷款申请，申请金额为50万元。
+
+员工李四的入职信息如下：姓名李四，性别女，出生日期1992年8月15日，邮箱lisi@example.com。紧急联系人王五，电话13900002222。
+
+Dear customer, your account has been created. Please verify your email address: zhangsan@example.com. Your phone number 13812345678 has been registered.
+
+系统通知：用户赵六(身份证320106198505060011)的资料审核已通过，请尽快邮寄相关材料至上海市浦东新区某某大厦A座。
+
+这是一个普通的文本段落，不包含任何结构化信息。它用于测试自由文本的检测能力。系统应该能识别出这类文件属于 free_text 类型而非结构化数据。
+
+申请人张三，身份证号440106199003151234，联系电话13800001111，现居住于北京市朝阳区某某路100号。该申请人于2024年1月提交了贷款申请，申请金额为50万元。
+
+员工李四的入职信息如下：姓名李四，性别女，出生日期1992年8月15日，邮箱lisi@example.com。紧急联系人王五，电话13900002222。
+
+Dear customer, your account has been created. Please verify your email address: zhangsan@example.com. Your phone number 13812345678 has been registered.
+
+系统通知：用户赵六(身份证320106198505060011)的资料审核已通过，请尽快邮寄相关材料至上海市浦东新区某某大厦A座。
+
+这是一个普通的文本段落，不包含任何结构化信息。它用于测试自由文本的检测能力。系统应该能识别出这类文件属于 free_text 类型而非结构化数据。
+
+申请人张三，身份证号440106199003151234，联系电话13800001111，现居住于北京市朝阳区某某路100号。该申请人于2024年1月提交了贷款申请，申请金额为50万元。
+
+员工李四的入职信息如下：姓名李四，性别女，出生日期1992年8月15日，邮箱lisi@example.com。紧急联系人王五，电话13900002222。
+
+Dear customer, your account has been created. Please verify your email address: zhangsan@example.com. Your phone number 13812345678 has been registered.
+
+系统通知：用户赵六(身份证320106198505060011)的资料审核已通过，请尽快邮寄相关材料至上海市浦东新区某某大厦A座。
+
+这是一个普通的文本段落，不包含任何结构化信息。它用于测试自由文本的检测能力。系统应该能识别出这类文件属于 free_text 类型而非结构化数据。

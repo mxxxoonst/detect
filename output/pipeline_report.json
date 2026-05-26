@@ -1,0 +1,5006 @@
+{
+  "phase0": {
+    "cross_table": {
+      "txt|csv": 2,
+      "txt|json": 1,
+      "txt|log": 1,
+      "log|csv": 1,
+      "json|json": 7,
+      "sql|sql": 2,
+      "csv|csv": 3,
+      "db|sqlite": 1,
+      "jsonl|jsonl": 1,
+      "tsv|tsv": 1,
+      "db|db_nonsqlite": 1,
+      "csv|empty": 1,
+      "json|empty": 1,
+      "txt|empty": 1,
+      "txt|free_text": 1,
+      "csv|free_text": 1,
+      "bin|tsv": 1
+    },
+    "format_dist": {
+      "csv": 6,
+      "json": 8,
+      "log": 1,
+      "sql": 2,
+      "sqlite": 1,
+      "jsonl": 1,
+      "tsv": 2,
+      "db_nonsqlite": 1,
+      "empty": 3,
+      "free_text": 2
+    },
+    "low_confidence_count": 3
+  },
+  "phase1": {
+    "tier1_count": 15,
+    "tier2_count": 4,
+    "noise_count": 1,
+    "free_text_count": 2
+  },
+  "phase2": {
+    "skeletons": {
+      "{\"address\":<str>,\"age\":<str>,\"created_at\":<str>,\"email\":<str>,\"gender\":<str>,\"id\":<str>,\"id_card\":<str>,\"name\":<str>,\"phone\":<str>,\"province\":<str>,\"score\":<str>}": 105,
+      "{\"123] [WARN] 权限检查失败: user_id=8873\":<str>,\"[2024-07-06 06:51:38\":<str>}": 49,
+      "{\"address\":<str>,\"age\":<int>,\"created_at\":<str>,\"email\":<str>,\"gender\":<str>,\"id\":<int>,\"id_card\":<str>,\"name\":<str>,\"phone\":<str>,\"province\":<str>,\"score\":<float>}": 46,
+      "{\"email\":<str>,\"id\":<str>,\"name\":<str>,\"phone\":<str>}": 5,
+      "{\"\":<str>,\"CREATE TABLE test (id INT)\":<str>}": 2,
+      "{\"schema\":<str>,\"table_name\":<str>}": 2,
+      "{\"departments\":[{\"manager\":{\"address\":<str>,\"age\":<int>,\"created_at\":<str>,\"email\":<str>,\"gender\":<str>,\"id\":<int>,\"id_card\":<str>,\"name\":<str>,\"phone\":<str>,\"province\":<str>,\"score\":<float>},\"members\":[{\"address\":<str>,\"age\":<int>,\"created_at\":<str>,\"email\":<str>,\"gender\":<str>,\"id\":<int>,\"id_card\":<str>,\"name\":<str>,\"phone\":<str>,\"province\":<str>,\"score\":<float>}],\"name\":<str>}],\"org\":<str>}": 1
+    },
+    "shape_templates_B": 7,
+    "field_vocab": {
+      "id": [
+        "departments[0].members[2].id",
+        "departments[1].members[3].id",
+        "departments[0].members[3].id",
+        "departments[1].members[1].id",
+        "departments[0].members[0].id",
+        "departments[1].members[2].id",
+        "departments[1].members[0].id",
+        "departments[1].manager.id",
+        "departments[0].manager.id",
+        "id",
+        "departments[0].members[1].id"
+      ],
+      "name": [
+        "departments[1].members[3].name",
+        "departments[0].name",
+        "departments[0].members[2].name",
+        "departments[0].manager.name",
+        "departments[0].members[1].name",
+        "departments[0].members[0].name",
+        "name",
+        "departments[1].members[0].name",
+        "departments[1].name",
+        "departments[1].manager.name",
+        "departments[1].members[2].name",
+        "departments[0].members[3].name",
+        "departments[1].members[1].name"
+      ],
+      "phone": [
+        "departments[1].members[0].phone",
+        "departments[0].manager.phone",
+        "departments[0].members[0].phone",
+        "departments[1].members[1].phone",
+        "phone",
+        "departments[0].members[1].phone",
+        "departments[1].members[3].phone",
+        "departments[1].members[2].phone",
+        "departments[1].manager.phone",
+        "departments[0].members[3].phone",
+        "departments[0].members[2].phone"
+      ],
+      "email": [
+        "departments[1].members[3].email",
+        "email",
+        "departments[0].members[1].email",
+        "departments[1].manager.email",
+        "departments[0].members[0].email",
+        "departments[1].members[2].email",
+        "departments[1].members[0].email",
+        "departments[0].manager.email",
+        "departments[0].members[3].email",
+        "departments[0].members[2].email",
+        "departments[1].members[1].email"
+      ],
+      "gender": [
+        "departments[1].manager.gender",
+        "departments[0].members[1].gender",
+        "gender",
+        "departments[0].members[2].gender",
+        "departments[0].members[3].gender",
+        "departments[1].members[1].gender",
+        "departments[1].members[2].gender",
+        "departments[1].members[0].gender",
+        "departments[1].members[3].gender",
+        "departments[0].members[0].gender",
+        "departments[0].manager.gender"
+      ],
+      "age": [
+        "departments[0].manager.age",
+        "departments[0].members[2].age",
+        "departments[0].members[3].age",
+        "departments[1].manager.age",
+        "departments[0].members[0].age",
+        "age",
+        "departments[1].members[0].age",
+        "departments[1].members[3].age",
+        "departments[1].members[1].age",
+        "departments[1].members[2].age",
+        "departments[0].members[1].age"
+      ],
+      "id_card": [
+        "departments[0].manager.id_card",
+        "departments[0].members[1].id_card",
+        "departments[0].members[2].id_card",
+        "id_card",
+        "departments[1].members[0].id_card",
+        "departments[1].manager.id_card",
+        "departments[1].members[2].id_card",
+        "departments[1].members[3].id_card",
+        "departments[1].members[1].id_card",
+        "departments[0].members[3].id_card",
+        "departments[0].members[0].id_card"
+      ],
+      "address": [
+        "departments[1].members[2].address",
+        "departments[1].manager.address",
+        "departments[0].members[2].address",
+        "departments[0].members[0].address",
+        "departments[1].members[3].address",
+        "departments[0].manager.address",
+        "departments[1].members[0].address",
+        "departments[1].members[1].address",
+        "departments[0].members[3].address",
+        "departments[0].members[1].address",
+        "address"
+      ],
+      "province": [
+        "departments[1].members[1].province",
+        "departments[1].manager.province",
+        "departments[0].members[0].province",
+        "departments[0].members[1].province",
+        "departments[1].members[0].province",
+        "departments[0].manager.province",
+        "departments[0].members[3].province",
+        "departments[0].members[2].province",
+        "province",
+        "departments[1].members[2].province",
+        "departments[1].members[3].province"
+      ],
+      "score": [
+        "departments[1].members[0].score",
+        "departments[0].members[0].score",
+        "departments[1].members[2].score",
+        "departments[0].members[2].score",
+        "departments[0].members[1].score",
+        "departments[0].manager.score",
+        "departments[1].members[1].score",
+        "departments[1].members[3].score",
+        "departments[1].manager.score",
+        "departments[0].members[3].score",
+        "score"
+      ],
+      "created_at": [
+        "departments[1].manager.created_at",
+        "created_at",
+        "departments[0].members[0].created_at",
+        "departments[1].members[1].created_at",
+        "departments[0].members[3].created_at",
+        "departments[0].members[2].created_at",
+        "departments[1].members[0].created_at",
+        "departments[0].manager.created_at",
+        "departments[0].members[1].created_at",
+        "departments[1].members[2].created_at",
+        "departments[1].members[3].created_at"
+      ],
+      "CREATE TABLE test (id INT)": [
+        "CREATE TABLE test (id INT)"
+      ],
+      "": [
+        ""
+      ],
+      "[2024-07-06 06:51:38": [
+        "[2024-07-06 06:51:38"
+      ],
+      "123] [WARN] 权限检查失败: user_id=8873": [
+        "123] [WARN] 权限检查失败: user_id=8873"
+      ],
+      "org": [
+        "org"
+      ],
+      "departments": [
+        "departments"
+      ],
+      "manager": [
+        "departments[1].manager",
+        "departments[0].manager"
+      ],
+      "members": [
+        "departments[1].members",
+        "departments[0].members"
+      ],
+      "table_name": [
+        "table_name"
+      ],
+      "schema": [
+        "schema"
+      ]
+    },
+    "naming_templates_A": 21,
+    "AB_ratio": 3.0,
+    "value_profiles": {
+      "id": {
+        "sample_count": 156,
+        "len_dist": {
+          "min": 1,
+          "max": 2,
+          "mean": 1.6
+        },
+        "top_patterns": [
+          [
+            "D{2}",
+            69
+          ],
+          [
+            "D",
+            41
+          ]
+        ],
+        "unique_patterns": 2,
+        "avg_char_dist": {
+          "digit_pct": 1.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "name": {
+        "sample_count": 156,
+        "len_dist": {
+          "min": 2,
+          "max": 3,
+          "mean": 2.4
+        },
+        "top_patterns": [
+          [
+            "C{2}",
+            92
+          ],
+          [
+            "C{3}",
+            64
+          ]
+        ],
+        "unique_patterns": 2,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "phone": {
+        "sample_count": 156,
+        "len_dist": {
+          "min": 11,
+          "max": 11,
+          "mean": 11.0
+        },
+        "top_patterns": [
+          [
+            "D{11}",
+            156
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 1.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "email": {
+        "sample_count": 156,
+        "len_dist": {
+          "min": 17,
+          "max": 18,
+          "mean": 17.6
+        },
+        "top_patterns": [
+          [
+            "L{4}D{2}SL{7}SL{3}",
+            93
+          ],
+          [
+            "L{4}DSL{7}SL{3}",
+            63
+          ]
+        ],
+        "unique_patterns": 2,
+        "avg_char_dist": {
+          "digit_pct": 0.09,
+          "alpha_pct": 0.797,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.114,
+          "space_pct": 0.0
+        }
+      },
+      "gender": {
+        "sample_count": 151,
+        "len_dist": {
+          "min": 1,
+          "max": 1,
+          "mean": 1.0
+        },
+        "top_patterns": [
+          [
+            "C",
+            151
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "age": {
+        "sample_count": 151,
+        "len_dist": {
+          "min": 2,
+          "max": 2,
+          "mean": 2.0
+        },
+        "top_patterns": [
+          [
+            "D{2}",
+            105
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 1.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "id_card": {
+        "sample_count": 151,
+        "len_dist": {
+          "min": 18,
+          "max": 18,
+          "mean": 18.0
+        },
+        "top_patterns": [
+          [
+            "D{18}",
+            151
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 1.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "address": {
+        "sample_count": 151,
+        "len_dist": {
+          "min": 12,
+          "max": 13,
+          "mean": 12.5
+        },
+        "top_patterns": [
+          [
+            "C{9}D{3}C",
+            43
+          ],
+          [
+            "C{12}",
+            31
+          ],
+          [
+            "C{9}D{2}C",
+            30
+          ],
+          [
+            "C{11}LC",
+            26
+          ],
+          [
+            "C{10}DC",
+            21
+          ]
+        ],
+        "unique_patterns": 5,
+        "avg_char_dist": {
+          "digit_pct": 0.111,
+          "alpha_pct": 0.013,
+          "cjk_pct": 0.876,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "province": {
+        "sample_count": 151,
+        "len_dist": {
+          "min": 2,
+          "max": 2,
+          "mean": 2.0
+        },
+        "top_patterns": [
+          [
+            "C{2}",
+            151
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "score": {
+        "sample_count": 151,
+        "len_dist": {
+          "min": 4,
+          "max": 5,
+          "mean": 5.0
+        },
+        "top_patterns": [
+          [
+            "D{2}SD{2}",
+            101
+          ],
+          [
+            "D{2}SD",
+            4
+          ]
+        ],
+        "unique_patterns": 2,
+        "avg_char_dist": {
+          "digit_pct": 0.798,
+          "alpha_pct": 0.0,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.202,
+          "space_pct": 0.0
+        }
+      },
+      "created_at": {
+        "sample_count": 151,
+        "len_dist": {
+          "min": 20,
+          "max": 20,
+          "mean": 20.0
+        },
+        "top_patterns": [
+          [
+            "D{4}SD{2}SD{2}LD{2}SD{2}SD{2}L",
+            151
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.7,
+          "alpha_pct": 0.1,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.2,
+          "space_pct": 0.0
+        }
+      },
+      "CREATE TABLE test (id INT)": {
+        "sample_count": 2,
+        "len_dist": {
+          "min": 27,
+          "max": 27,
+          "mean": 27.0
+        },
+        "top_patterns": [
+          [
+            "L{6} L{4} L{4} L{6} SDS",
+            2
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.037,
+          "alpha_pct": 0.741,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.074,
+          "space_pct": 0.148
+        }
+      },
+      "": {
+        "sample_count": 2,
+        "len_dist": {
+          "min": 0,
+          "max": 0,
+          "mean": 0.0
+        },
+        "top_patterns": [
+          [
+            "",
+            2
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "[2024-07-06 06:51:38": {
+        "sample_count": 49,
+        "len_dist": {
+          "min": 20,
+          "max": 20,
+          "mean": 20.0
+        },
+        "top_patterns": [
+          [
+            "SD{4}SD{2}SD{2} D{2}SD{2}SD{2}",
+            49
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.7,
+          "alpha_pct": 0.0,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.2,
+          "space_pct": 0.05
+        }
+      },
+      "123] [WARN] 权限检查失败: user_id=8873": {
+        "sample_count": 49,
+        "len_dist": {
+          "min": 22,
+          "max": 50,
+          "mean": 42.4
+        },
+        "top_patterns": [
+          [
+            "D{3}S SL{5}S C{6}S L{4}SL{2}SD{4}",
+            7
+          ],
+          [
+            "D{3}S SL{5}S L{8} L{10} L{7} L{5} D{2}L",
+            5
+          ],
+          [
+            "D{3}S SL{4}S L{7} L{9} L{4} D{3}SD{3}SDSD{3}",
+            4
+          ],
+          [
+            "D{3}S SL{4}S L{5} L{4} L{3} L{3}S L{7}SD{5}",
+            4
+          ],
+          [
+            "D{3}S SL{4}S C{6}S L{4}SL{2}SD{4}",
+            4
+          ],
+          [
+            "D{3}S SL{5}S L{5} L{4} L{3} L{3}S L{7}SD{5}",
+            4
+          ],
+          [
+            "D{3}S SL{4}S L{4} L{6} L{9}S L{6}SD{2}SL{3}",
+            4
+          ],
+          [
+            "D{3}S SL{5}S L{4} L{6} L{9}S L{6}SD{2}SL{3}",
+            3
+          ],
+          [
+            "D{3}S SL{4}S L{8} L{10} L{7} L{5} D{2}L",
+            3
+          ],
+          [
+            "D{3}S SL{4}S C{2} C{2} C{4}",
+            3
+          ]
+        ],
+        "unique_patterns": 15,
+        "avg_char_dist": {
+          "digit_pct": 0.175,
+          "alpha_pct": 0.514,
+          "cjk_pct": 0.071,
+          "punct_pct": 0.05,
+          "space_pct": 0.115
+        }
+      },
+      "org": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 4,
+          "max": 4,
+          "mean": 4.0
+        },
+        "top_patterns": [
+          [
+            "C{4}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 2,
+          "max": 2,
+          "mean": 2.0
+        }
+      },
+      "departments[0].name": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 3,
+          "max": 3,
+          "mean": 3.0
+        },
+        "top_patterns": [
+          [
+            "C{3}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].manager": {
+        "sample_count": 1
+      },
+      "departments[0].manager.id": {
+        "sample_count": 1
+      },
+      "departments[0].manager.name": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 3,
+          "max": 3,
+          "mean": 3.0
+        },
+        "top_patterns": [
+          [
+            "C{3}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].manager.gender": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 1,
+          "max": 1,
+          "mean": 1.0
+        },
+        "top_patterns": [
+          [
+            "C",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].manager.age": {
+        "sample_count": 1
+      },
+      "departments[0].manager.phone": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 11,
+          "max": 11,
+          "mean": 11.0
+        },
+        "top_patterns": [
+          [
+            "D{11}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 1.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].manager.email": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 17,
+          "max": 17,
+          "mean": 17.0
+        },
+        "top_patterns": [
+          [
+            "L{4}DSL{7}SL{3}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.059,
+          "alpha_pct": 0.824,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.118,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].manager.id_card": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 18,
+          "max": 18,
+          "mean": 18.0
+        },
+        "top_patterns": [
+          [
+            "D{18}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 1.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].manager.address": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 13,
+          "max": 13,
+          "mean": 13.0
+        },
+        "top_patterns": [
+          [
+            "C{11}LC",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.077,
+          "cjk_pct": 0.923,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].manager.province": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 2,
+          "max": 2,
+          "mean": 2.0
+        },
+        "top_patterns": [
+          [
+            "C{2}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].manager.score": {
+        "sample_count": 1
+      },
+      "departments[0].manager.created_at": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 20,
+          "max": 20,
+          "mean": 20.0
+        },
+        "top_patterns": [
+          [
+            "D{4}SD{2}SD{2}LD{2}SD{2}SD{2}L",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.7,
+          "alpha_pct": 0.1,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.2,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].members": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 4,
+          "max": 4,
+          "mean": 4.0
+        }
+      },
+      "departments[0].members[0].id": {
+        "sample_count": 1
+      },
+      "departments[0].members[0].name": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 2,
+          "max": 2,
+          "mean": 2.0
+        },
+        "top_patterns": [
+          [
+            "C{2}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].members[0].gender": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 1,
+          "max": 1,
+          "mean": 1.0
+        },
+        "top_patterns": [
+          [
+            "C",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].members[0].age": {
+        "sample_count": 1
+      },
+      "departments[0].members[0].phone": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 11,
+          "max": 11,
+          "mean": 11.0
+        },
+        "top_patterns": [
+          [
+            "D{11}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 1.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].members[0].email": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 17,
+          "max": 17,
+          "mean": 17.0
+        },
+        "top_patterns": [
+          [
+            "L{4}DSL{7}SL{3}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.059,
+          "alpha_pct": 0.824,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.118,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].members[0].id_card": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 18,
+          "max": 18,
+          "mean": 18.0
+        },
+        "top_patterns": [
+          [
+            "D{18}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 1.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].members[0].address": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 13,
+          "max": 13,
+          "mean": 13.0
+        },
+        "top_patterns": [
+          [
+            "C{9}D{3}C",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.231,
+          "alpha_pct": 0.0,
+          "cjk_pct": 0.769,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].members[0].province": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 2,
+          "max": 2,
+          "mean": 2.0
+        },
+        "top_patterns": [
+          [
+            "C{2}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].members[0].score": {
+        "sample_count": 1
+      },
+      "departments[0].members[0].created_at": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 20,
+          "max": 20,
+          "mean": 20.0
+        },
+        "top_patterns": [
+          [
+            "D{4}SD{2}SD{2}LD{2}SD{2}SD{2}L",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.7,
+          "alpha_pct": 0.1,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.2,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].members[1].id": {
+        "sample_count": 1
+      },
+      "departments[0].members[1].name": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 2,
+          "max": 2,
+          "mean": 2.0
+        },
+        "top_patterns": [
+          [
+            "C{2}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].members[1].gender": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 1,
+          "max": 1,
+          "mean": 1.0
+        },
+        "top_patterns": [
+          [
+            "C",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].members[1].age": {
+        "sample_count": 1
+      },
+      "departments[0].members[1].phone": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 11,
+          "max": 11,
+          "mean": 11.0
+        },
+        "top_patterns": [
+          [
+            "D{11}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 1.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].members[1].email": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 17,
+          "max": 17,
+          "mean": 17.0
+        },
+        "top_patterns": [
+          [
+            "L{4}DSL{7}SL{3}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.059,
+          "alpha_pct": 0.824,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.118,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].members[1].id_card": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 18,
+          "max": 18,
+          "mean": 18.0
+        },
+        "top_patterns": [
+          [
+            "D{18}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 1.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].members[1].address": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 13,
+          "max": 13,
+          "mean": 13.0
+        },
+        "top_patterns": [
+          [
+            "C{11}LC",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.077,
+          "cjk_pct": 0.923,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].members[1].province": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 2,
+          "max": 2,
+          "mean": 2.0
+        },
+        "top_patterns": [
+          [
+            "C{2}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].members[1].score": {
+        "sample_count": 1
+      },
+      "departments[0].members[1].created_at": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 20,
+          "max": 20,
+          "mean": 20.0
+        },
+        "top_patterns": [
+          [
+            "D{4}SD{2}SD{2}LD{2}SD{2}SD{2}L",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.7,
+          "alpha_pct": 0.1,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.2,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].members[2].id": {
+        "sample_count": 1
+      },
+      "departments[0].members[2].name": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 2,
+          "max": 2,
+          "mean": 2.0
+        },
+        "top_patterns": [
+          [
+            "C{2}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].members[2].gender": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 1,
+          "max": 1,
+          "mean": 1.0
+        },
+        "top_patterns": [
+          [
+            "C",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].members[2].age": {
+        "sample_count": 1
+      },
+      "departments[0].members[2].phone": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 11,
+          "max": 11,
+          "mean": 11.0
+        },
+        "top_patterns": [
+          [
+            "D{11}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 1.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].members[2].email": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 18,
+          "max": 18,
+          "mean": 18.0
+        },
+        "top_patterns": [
+          [
+            "L{4}D{2}SL{7}SL{3}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.111,
+          "alpha_pct": 0.778,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.111,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].members[2].id_card": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 18,
+          "max": 18,
+          "mean": 18.0
+        },
+        "top_patterns": [
+          [
+            "D{18}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 1.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].members[2].address": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 12,
+          "max": 12,
+          "mean": 12.0
+        },
+        "top_patterns": [
+          [
+            "C{10}DC",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.083,
+          "alpha_pct": 0.0,
+          "cjk_pct": 0.917,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].members[2].province": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 2,
+          "max": 2,
+          "mean": 2.0
+        },
+        "top_patterns": [
+          [
+            "C{2}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].members[2].score": {
+        "sample_count": 1
+      },
+      "departments[0].members[2].created_at": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 20,
+          "max": 20,
+          "mean": 20.0
+        },
+        "top_patterns": [
+          [
+            "D{4}SD{2}SD{2}LD{2}SD{2}SD{2}L",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.7,
+          "alpha_pct": 0.1,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.2,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].members[3].id": {
+        "sample_count": 1
+      },
+      "departments[0].members[3].name": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 3,
+          "max": 3,
+          "mean": 3.0
+        },
+        "top_patterns": [
+          [
+            "C{3}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].members[3].gender": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 1,
+          "max": 1,
+          "mean": 1.0
+        },
+        "top_patterns": [
+          [
+            "C",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].members[3].age": {
+        "sample_count": 1
+      },
+      "departments[0].members[3].phone": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 11,
+          "max": 11,
+          "mean": 11.0
+        },
+        "top_patterns": [
+          [
+            "D{11}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 1.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].members[3].email": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 18,
+          "max": 18,
+          "mean": 18.0
+        },
+        "top_patterns": [
+          [
+            "L{4}D{2}SL{7}SL{3}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.111,
+          "alpha_pct": 0.778,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.111,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].members[3].id_card": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 18,
+          "max": 18,
+          "mean": 18.0
+        },
+        "top_patterns": [
+          [
+            "D{18}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 1.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].members[3].address": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 13,
+          "max": 13,
+          "mean": 13.0
+        },
+        "top_patterns": [
+          [
+            "C{11}LC",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.077,
+          "cjk_pct": 0.923,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].members[3].province": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 2,
+          "max": 2,
+          "mean": 2.0
+        },
+        "top_patterns": [
+          [
+            "C{2}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[0].members[3].score": {
+        "sample_count": 1
+      },
+      "departments[0].members[3].created_at": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 20,
+          "max": 20,
+          "mean": 20.0
+        },
+        "top_patterns": [
+          [
+            "D{4}SD{2}SD{2}LD{2}SD{2}SD{2}L",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.7,
+          "alpha_pct": 0.1,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.2,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].name": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 3,
+          "max": 3,
+          "mean": 3.0
+        },
+        "top_patterns": [
+          [
+            "C{3}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].manager": {
+        "sample_count": 1
+      },
+      "departments[1].manager.id": {
+        "sample_count": 1
+      },
+      "departments[1].manager.name": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 3,
+          "max": 3,
+          "mean": 3.0
+        },
+        "top_patterns": [
+          [
+            "C{3}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].manager.gender": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 1,
+          "max": 1,
+          "mean": 1.0
+        },
+        "top_patterns": [
+          [
+            "C",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].manager.age": {
+        "sample_count": 1
+      },
+      "departments[1].manager.phone": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 11,
+          "max": 11,
+          "mean": 11.0
+        },
+        "top_patterns": [
+          [
+            "D{11}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 1.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].manager.email": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 17,
+          "max": 17,
+          "mean": 17.0
+        },
+        "top_patterns": [
+          [
+            "L{4}DSL{7}SL{3}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.059,
+          "alpha_pct": 0.824,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.118,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].manager.id_card": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 18,
+          "max": 18,
+          "mean": 18.0
+        },
+        "top_patterns": [
+          [
+            "D{18}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 1.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].manager.address": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 12,
+          "max": 12,
+          "mean": 12.0
+        },
+        "top_patterns": [
+          [
+            "C{9}D{2}C",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.167,
+          "alpha_pct": 0.0,
+          "cjk_pct": 0.833,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].manager.province": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 2,
+          "max": 2,
+          "mean": 2.0
+        },
+        "top_patterns": [
+          [
+            "C{2}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].manager.score": {
+        "sample_count": 1
+      },
+      "departments[1].manager.created_at": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 20,
+          "max": 20,
+          "mean": 20.0
+        },
+        "top_patterns": [
+          [
+            "D{4}SD{2}SD{2}LD{2}SD{2}SD{2}L",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.7,
+          "alpha_pct": 0.1,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.2,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].members": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 4,
+          "max": 4,
+          "mean": 4.0
+        }
+      },
+      "departments[1].members[0].id": {
+        "sample_count": 1
+      },
+      "departments[1].members[0].name": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 3,
+          "max": 3,
+          "mean": 3.0
+        },
+        "top_patterns": [
+          [
+            "C{3}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].members[0].gender": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 1,
+          "max": 1,
+          "mean": 1.0
+        },
+        "top_patterns": [
+          [
+            "C",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].members[0].age": {
+        "sample_count": 1
+      },
+      "departments[1].members[0].phone": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 11,
+          "max": 11,
+          "mean": 11.0
+        },
+        "top_patterns": [
+          [
+            "D{11}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 1.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].members[0].email": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 18,
+          "max": 18,
+          "mean": 18.0
+        },
+        "top_patterns": [
+          [
+            "L{4}D{2}SL{7}SL{3}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.111,
+          "alpha_pct": 0.778,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.111,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].members[0].id_card": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 18,
+          "max": 18,
+          "mean": 18.0
+        },
+        "top_patterns": [
+          [
+            "D{18}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 1.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].members[0].address": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 13,
+          "max": 13,
+          "mean": 13.0
+        },
+        "top_patterns": [
+          [
+            "C{11}LC",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.077,
+          "cjk_pct": 0.923,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].members[0].province": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 2,
+          "max": 2,
+          "mean": 2.0
+        },
+        "top_patterns": [
+          [
+            "C{2}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].members[0].score": {
+        "sample_count": 1
+      },
+      "departments[1].members[0].created_at": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 20,
+          "max": 20,
+          "mean": 20.0
+        },
+        "top_patterns": [
+          [
+            "D{4}SD{2}SD{2}LD{2}SD{2}SD{2}L",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.7,
+          "alpha_pct": 0.1,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.2,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].members[1].id": {
+        "sample_count": 1
+      },
+      "departments[1].members[1].name": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 3,
+          "max": 3,
+          "mean": 3.0
+        },
+        "top_patterns": [
+          [
+            "C{3}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].members[1].gender": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 1,
+          "max": 1,
+          "mean": 1.0
+        },
+        "top_patterns": [
+          [
+            "C",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].members[1].age": {
+        "sample_count": 1
+      },
+      "departments[1].members[1].phone": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 11,
+          "max": 11,
+          "mean": 11.0
+        },
+        "top_patterns": [
+          [
+            "D{11}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 1.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].members[1].email": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 17,
+          "max": 17,
+          "mean": 17.0
+        },
+        "top_patterns": [
+          [
+            "L{4}DSL{7}SL{3}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.059,
+          "alpha_pct": 0.824,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.118,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].members[1].id_card": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 18,
+          "max": 18,
+          "mean": 18.0
+        },
+        "top_patterns": [
+          [
+            "D{18}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 1.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].members[1].address": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 12,
+          "max": 12,
+          "mean": 12.0
+        },
+        "top_patterns": [
+          [
+            "C{12}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].members[1].province": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 2,
+          "max": 2,
+          "mean": 2.0
+        },
+        "top_patterns": [
+          [
+            "C{2}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].members[1].score": {
+        "sample_count": 1
+      },
+      "departments[1].members[1].created_at": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 20,
+          "max": 20,
+          "mean": 20.0
+        },
+        "top_patterns": [
+          [
+            "D{4}SD{2}SD{2}LD{2}SD{2}SD{2}L",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.7,
+          "alpha_pct": 0.1,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.2,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].members[2].id": {
+        "sample_count": 1
+      },
+      "departments[1].members[2].name": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 3,
+          "max": 3,
+          "mean": 3.0
+        },
+        "top_patterns": [
+          [
+            "C{3}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].members[2].gender": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 1,
+          "max": 1,
+          "mean": 1.0
+        },
+        "top_patterns": [
+          [
+            "C",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].members[2].age": {
+        "sample_count": 1
+      },
+      "departments[1].members[2].phone": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 11,
+          "max": 11,
+          "mean": 11.0
+        },
+        "top_patterns": [
+          [
+            "D{11}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 1.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].members[2].email": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 17,
+          "max": 17,
+          "mean": 17.0
+        },
+        "top_patterns": [
+          [
+            "L{4}DSL{7}SL{3}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.059,
+          "alpha_pct": 0.824,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.118,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].members[2].id_card": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 18,
+          "max": 18,
+          "mean": 18.0
+        },
+        "top_patterns": [
+          [
+            "D{18}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 1.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].members[2].address": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 13,
+          "max": 13,
+          "mean": 13.0
+        },
+        "top_patterns": [
+          [
+            "C{11}LC",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.077,
+          "cjk_pct": 0.923,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].members[2].province": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 2,
+          "max": 2,
+          "mean": 2.0
+        },
+        "top_patterns": [
+          [
+            "C{2}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].members[2].score": {
+        "sample_count": 1
+      },
+      "departments[1].members[2].created_at": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 20,
+          "max": 20,
+          "mean": 20.0
+        },
+        "top_patterns": [
+          [
+            "D{4}SD{2}SD{2}LD{2}SD{2}SD{2}L",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.7,
+          "alpha_pct": 0.1,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.2,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].members[3].id": {
+        "sample_count": 1
+      },
+      "departments[1].members[3].name": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 2,
+          "max": 2,
+          "mean": 2.0
+        },
+        "top_patterns": [
+          [
+            "C{2}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].members[3].gender": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 1,
+          "max": 1,
+          "mean": 1.0
+        },
+        "top_patterns": [
+          [
+            "C",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].members[3].age": {
+        "sample_count": 1
+      },
+      "departments[1].members[3].phone": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 11,
+          "max": 11,
+          "mean": 11.0
+        },
+        "top_patterns": [
+          [
+            "D{11}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 1.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].members[3].email": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 17,
+          "max": 17,
+          "mean": 17.0
+        },
+        "top_patterns": [
+          [
+            "L{4}DSL{7}SL{3}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.059,
+          "alpha_pct": 0.824,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.118,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].members[3].id_card": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 18,
+          "max": 18,
+          "mean": 18.0
+        },
+        "top_patterns": [
+          [
+            "D{18}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 1.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].members[3].address": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 12,
+          "max": 12,
+          "mean": 12.0
+        },
+        "top_patterns": [
+          [
+            "C{12}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].members[3].province": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 2,
+          "max": 2,
+          "mean": 2.0
+        },
+        "top_patterns": [
+          [
+            "C{2}",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.0,
+          "cjk_pct": 1.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "departments[1].members[3].score": {
+        "sample_count": 1
+      },
+      "departments[1].members[3].created_at": {
+        "sample_count": 1,
+        "len_dist": {
+          "min": 20,
+          "max": 20,
+          "mean": 20.0
+        },
+        "top_patterns": [
+          [
+            "D{4}SD{2}SD{2}LD{2}SD{2}SD{2}L",
+            1
+          ]
+        ],
+        "unique_patterns": 1,
+        "avg_char_dist": {
+          "digit_pct": 0.7,
+          "alpha_pct": 0.1,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.2,
+          "space_pct": 0.0
+        }
+      },
+      "table_name": {
+        "sample_count": 2,
+        "len_dist": {
+          "min": 5,
+          "max": 6,
+          "mean": 5.5
+        },
+        "top_patterns": [
+          [
+            "L{5}",
+            1
+          ],
+          [
+            "L{6}",
+            1
+          ]
+        ],
+        "unique_patterns": 2,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 1.0,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.0,
+          "space_pct": 0.0
+        }
+      },
+      "schema": {
+        "sample_count": 2,
+        "len_dist": {
+          "min": 202,
+          "max": 270,
+          "mean": 236.0
+        },
+        "top_patterns": [
+          [
+            "L{6} L{5} L{5} S {9}L{2} L{7} L{7} L{3}S {9}L{4} L{4}S {9}L{6} L{4}S {9}L{3} L{7}S {9}L{5} L{4}S {9}L{5} L{4}S {9}L{2}SL{4} L{4}S {9}L{7} L{4}S {9}L{8} L{4}S {9}L{5} L{4}S {9}L{7}SL{2} L{4} {5}S",
+            1
+          ],
+          [
+            "L{6} L{5} L{6} S {9}L{2} L{7} L{7} L{3}S {9}L{4}SL{2} L{7}S {9}L{7} L{4}S {9}L{6} L{4}S {9}L{5}SL{4} L{4}S {9}L{7} L{3}SL{4}SL{2}S L{10} L{5}SL{2}S {5}S",
+            1
+          ]
+        ],
+        "unique_patterns": 2,
+        "avg_char_dist": {
+          "digit_pct": 0.0,
+          "alpha_pct": 0.539,
+          "cjk_pct": 0.0,
+          "punct_pct": 0.06,
+          "space_pct": 0.4
+        }
+      }
+    },
+    "topology": {
+      "id": {
+        "depth": 1,
+        "parent": null,
+        "siblings": [
+          "name",
+          "gender",
+          "age",
+          "phone",
+          "email",
+          "id_card",
+          "address",
+          "province",
+          "score",
+          "created_at"
+        ]
+      },
+      "name": {
+        "depth": 1,
+        "parent": null,
+        "siblings": [
+          "id",
+          "gender",
+          "age",
+          "phone",
+          "email",
+          "id_card",
+          "address",
+          "province",
+          "score",
+          "created_at"
+        ]
+      },
+      "phone": {
+        "depth": 1,
+        "parent": null,
+        "siblings": [
+          "id",
+          "name",
+          "gender",
+          "age",
+          "email",
+          "id_card",
+          "address",
+          "province",
+          "score",
+          "created_at"
+        ]
+      },
+      "email": {
+        "depth": 1,
+        "parent": null,
+        "siblings": [
+          "id",
+          "name",
+          "gender",
+          "age",
+          "phone",
+          "id_card",
+          "address",
+          "province",
+          "score",
+          "created_at"
+        ]
+      },
+      "gender": {
+        "depth": 1,
+        "parent": null,
+        "siblings": [
+          "id",
+          "name",
+          "age",
+          "phone",
+          "email",
+          "id_card",
+          "address",
+          "province",
+          "score",
+          "created_at"
+        ]
+      },
+      "age": {
+        "depth": 1,
+        "parent": null,
+        "siblings": [
+          "id",
+          "name",
+          "gender",
+          "phone",
+          "email",
+          "id_card",
+          "address",
+          "province",
+          "score",
+          "created_at"
+        ]
+      },
+      "id_card": {
+        "depth": 1,
+        "parent": null,
+        "siblings": [
+          "id",
+          "name",
+          "gender",
+          "age",
+          "phone",
+          "email",
+          "address",
+          "province",
+          "score",
+          "created_at"
+        ]
+      },
+      "address": {
+        "depth": 1,
+        "parent": null,
+        "siblings": [
+          "id",
+          "name",
+          "gender",
+          "age",
+          "phone",
+          "email",
+          "id_card",
+          "province",
+          "score",
+          "created_at"
+        ]
+      },
+      "province": {
+        "depth": 1,
+        "parent": null,
+        "siblings": [
+          "id",
+          "name",
+          "gender",
+          "age",
+          "phone",
+          "email",
+          "id_card",
+          "address",
+          "score",
+          "created_at"
+        ]
+      },
+      "score": {
+        "depth": 1,
+        "parent": null,
+        "siblings": [
+          "id",
+          "name",
+          "gender",
+          "age",
+          "phone",
+          "email",
+          "id_card",
+          "address",
+          "province",
+          "created_at"
+        ]
+      },
+      "created_at": {
+        "depth": 1,
+        "parent": null,
+        "siblings": [
+          "id",
+          "name",
+          "gender",
+          "age",
+          "phone",
+          "email",
+          "id_card",
+          "address",
+          "province",
+          "score"
+        ]
+      },
+      "CREATE TABLE test (id INT)": {
+        "depth": 1,
+        "parent": null,
+        "siblings": [
+          ""
+        ]
+      },
+      "": {
+        "depth": 1,
+        "parent": null,
+        "siblings": [
+          "CREATE TABLE test (id INT)"
+        ]
+      },
+      "[2024-07-06 06:51:38": {
+        "depth": 1,
+        "parent": null,
+        "siblings": [
+          "123] [WARN] 权限检查失败: user_id=8873"
+        ]
+      },
+      "123] [WARN] 权限检查失败: user_id=8873": {
+        "depth": 1,
+        "parent": null,
+        "siblings": [
+          "[2024-07-06 06:51:38"
+        ]
+      },
+      "org": {
+        "depth": 1,
+        "parent": null,
+        "siblings": [
+          "departments"
+        ]
+      },
+      "departments": {
+        "depth": 1,
+        "parent": null,
+        "siblings": [
+          "org"
+        ]
+      },
+      "departments[0]": {
+        "depth": 1,
+        "parent": "departments",
+        "siblings": []
+      },
+      "departments[0].name": {
+        "depth": 2,
+        "parent": "departments[0]",
+        "siblings": [
+          "departments[0].manager",
+          "departments[0].members"
+        ]
+      },
+      "departments[0].manager": {
+        "depth": 2,
+        "parent": "departments[0]",
+        "siblings": [
+          "departments[0].name",
+          "departments[0].members"
+        ]
+      },
+      "departments[0].manager.id": {
+        "depth": 3,
+        "parent": "departments[0].manager",
+        "siblings": [
+          "departments[0].manager.name",
+          "departments[0].manager.gender",
+          "departments[0].manager.age",
+          "departments[0].manager.phone",
+          "departments[0].manager.email",
+          "departments[0].manager.id_card",
+          "departments[0].manager.address",
+          "departments[0].manager.province",
+          "departments[0].manager.score",
+          "departments[0].manager.created_at"
+        ]
+      },
+      "departments[0].manager.name": {
+        "depth": 3,
+        "parent": "departments[0].manager",
+        "siblings": [
+          "departments[0].manager.id",
+          "departments[0].manager.gender",
+          "departments[0].manager.age",
+          "departments[0].manager.phone",
+          "departments[0].manager.email",
+          "departments[0].manager.id_card",
+          "departments[0].manager.address",
+          "departments[0].manager.province",
+          "departments[0].manager.score",
+          "departments[0].manager.created_at"
+        ]
+      },
+      "departments[0].manager.gender": {
+        "depth": 3,
+        "parent": "departments[0].manager",
+        "siblings": [
+          "departments[0].manager.id",
+          "departments[0].manager.name",
+          "departments[0].manager.age",
+          "departments[0].manager.phone",
+          "departments[0].manager.email",
+          "departments[0].manager.id_card",
+          "departments[0].manager.address",
+          "departments[0].manager.province",
+          "departments[0].manager.score",
+          "departments[0].manager.created_at"
+        ]
+      },
+      "departments[0].manager.age": {
+        "depth": 3,
+        "parent": "departments[0].manager",
+        "siblings": [
+          "departments[0].manager.id",
+          "departments[0].manager.name",
+          "departments[0].manager.gender",
+          "departments[0].manager.phone",
+          "departments[0].manager.email",
+          "departments[0].manager.id_card",
+          "departments[0].manager.address",
+          "departments[0].manager.province",
+          "departments[0].manager.score",
+          "departments[0].manager.created_at"
+        ]
+      },
+      "departments[0].manager.phone": {
+        "depth": 3,
+        "parent": "departments[0].manager",
+        "siblings": [
+          "departments[0].manager.id",
+          "departments[0].manager.name",
+          "departments[0].manager.gender",
+          "departments[0].manager.age",
+          "departments[0].manager.email",
+          "departments[0].manager.id_card",
+          "departments[0].manager.address",
+          "departments[0].manager.province",
+          "departments[0].manager.score",
+          "departments[0].manager.created_at"
+        ]
+      },
+      "departments[0].manager.email": {
+        "depth": 3,
+        "parent": "departments[0].manager",
+        "siblings": [
+          "departments[0].manager.id",
+          "departments[0].manager.name",
+          "departments[0].manager.gender",
+          "departments[0].manager.age",
+          "departments[0].manager.phone",
+          "departments[0].manager.id_card",
+          "departments[0].manager.address",
+          "departments[0].manager.province",
+          "departments[0].manager.score",
+          "departments[0].manager.created_at"
+        ]
+      },
+      "departments[0].manager.id_card": {
+        "depth": 3,
+        "parent": "departments[0].manager",
+        "siblings": [
+          "departments[0].manager.id",
+          "departments[0].manager.name",
+          "departments[0].manager.gender",
+          "departments[0].manager.age",
+          "departments[0].manager.phone",
+          "departments[0].manager.email",
+          "departments[0].manager.address",
+          "departments[0].manager.province",
+          "departments[0].manager.score",
+          "departments[0].manager.created_at"
+        ]
+      },
+      "departments[0].manager.address": {
+        "depth": 3,
+        "parent": "departments[0].manager",
+        "siblings": [
+          "departments[0].manager.id",
+          "departments[0].manager.name",
+          "departments[0].manager.gender",
+          "departments[0].manager.age",
+          "departments[0].manager.phone",
+          "departments[0].manager.email",
+          "departments[0].manager.id_card",
+          "departments[0].manager.province",
+          "departments[0].manager.score",
+          "departments[0].manager.created_at"
+        ]
+      },
+      "departments[0].manager.province": {
+        "depth": 3,
+        "parent": "departments[0].manager",
+        "siblings": [
+          "departments[0].manager.id",
+          "departments[0].manager.name",
+          "departments[0].manager.gender",
+          "departments[0].manager.age",
+          "departments[0].manager.phone",
+          "departments[0].manager.email",
+          "departments[0].manager.id_card",
+          "departments[0].manager.address",
+          "departments[0].manager.score",
+          "departments[0].manager.created_at"
+        ]
+      },
+      "departments[0].manager.score": {
+        "depth": 3,
+        "parent": "departments[0].manager",
+        "siblings": [
+          "departments[0].manager.id",
+          "departments[0].manager.name",
+          "departments[0].manager.gender",
+          "departments[0].manager.age",
+          "departments[0].manager.phone",
+          "departments[0].manager.email",
+          "departments[0].manager.id_card",
+          "departments[0].manager.address",
+          "departments[0].manager.province",
+          "departments[0].manager.created_at"
+        ]
+      },
+      "departments[0].manager.created_at": {
+        "depth": 3,
+        "parent": "departments[0].manager",
+        "siblings": [
+          "departments[0].manager.id",
+          "departments[0].manager.name",
+          "departments[0].manager.gender",
+          "departments[0].manager.age",
+          "departments[0].manager.phone",
+          "departments[0].manager.email",
+          "departments[0].manager.id_card",
+          "departments[0].manager.address",
+          "departments[0].manager.province",
+          "departments[0].manager.score"
+        ]
+      },
+      "departments[0].members": {
+        "depth": 2,
+        "parent": "departments[0]",
+        "siblings": [
+          "departments[0].name",
+          "departments[0].manager"
+        ]
+      },
+      "departments[0].members[0]": {
+        "depth": 2,
+        "parent": "departments[0].members",
+        "siblings": []
+      },
+      "departments[0].members[0].id": {
+        "depth": 3,
+        "parent": "departments[0].members[0]",
+        "siblings": [
+          "departments[0].members[0].name",
+          "departments[0].members[0].gender",
+          "departments[0].members[0].age",
+          "departments[0].members[0].phone",
+          "departments[0].members[0].email",
+          "departments[0].members[0].id_card",
+          "departments[0].members[0].address",
+          "departments[0].members[0].province",
+          "departments[0].members[0].score",
+          "departments[0].members[0].created_at"
+        ]
+      },
+      "departments[0].members[0].name": {
+        "depth": 3,
+        "parent": "departments[0].members[0]",
+        "siblings": [
+          "departments[0].members[0].id",
+          "departments[0].members[0].gender",
+          "departments[0].members[0].age",
+          "departments[0].members[0].phone",
+          "departments[0].members[0].email",
+          "departments[0].members[0].id_card",
+          "departments[0].members[0].address",
+          "departments[0].members[0].province",
+          "departments[0].members[0].score",
+          "departments[0].members[0].created_at"
+        ]
+      },
+      "departments[0].members[0].gender": {
+        "depth": 3,
+        "parent": "departments[0].members[0]",
+        "siblings": [
+          "departments[0].members[0].id",
+          "departments[0].members[0].name",
+          "departments[0].members[0].age",
+          "departments[0].members[0].phone",
+          "departments[0].members[0].email",
+          "departments[0].members[0].id_card",
+          "departments[0].members[0].address",
+          "departments[0].members[0].province",
+          "departments[0].members[0].score",
+          "departments[0].members[0].created_at"
+        ]
+      },
+      "departments[0].members[0].age": {
+        "depth": 3,
+        "parent": "departments[0].members[0]",
+        "siblings": [
+          "departments[0].members[0].id",
+          "departments[0].members[0].name",
+          "departments[0].members[0].gender",
+          "departments[0].members[0].phone",
+          "departments[0].members[0].email",
+          "departments[0].members[0].id_card",
+          "departments[0].members[0].address",
+          "departments[0].members[0].province",
+          "departments[0].members[0].score",
+          "departments[0].members[0].created_at"
+        ]
+      },
+      "departments[0].members[0].phone": {
+        "depth": 3,
+        "parent": "departments[0].members[0]",
+        "siblings": [
+          "departments[0].members[0].id",
+          "departments[0].members[0].name",
+          "departments[0].members[0].gender",
+          "departments[0].members[0].age",
+          "departments[0].members[0].email",
+          "departments[0].members[0].id_card",
+          "departments[0].members[0].address",
+          "departments[0].members[0].province",
+          "departments[0].members[0].score",
+          "departments[0].members[0].created_at"
+        ]
+      },
+      "departments[0].members[0].email": {
+        "depth": 3,
+        "parent": "departments[0].members[0]",
+        "siblings": [
+          "departments[0].members[0].id",
+          "departments[0].members[0].name",
+          "departments[0].members[0].gender",
+          "departments[0].members[0].age",
+          "departments[0].members[0].phone",
+          "departments[0].members[0].id_card",
+          "departments[0].members[0].address",
+          "departments[0].members[0].province",
+          "departments[0].members[0].score",
+          "departments[0].members[0].created_at"
+        ]
+      },
+      "departments[0].members[0].id_card": {
+        "depth": 3,
+        "parent": "departments[0].members[0]",
+        "siblings": [
+          "departments[0].members[0].id",
+          "departments[0].members[0].name",
+          "departments[0].members[0].gender",
+          "departments[0].members[0].age",
+          "departments[0].members[0].phone",
+          "departments[0].members[0].email",
+          "departments[0].members[0].address",
+          "departments[0].members[0].province",
+          "departments[0].members[0].score",
+          "departments[0].members[0].created_at"
+        ]
+      },
+      "departments[0].members[0].address": {
+        "depth": 3,
+        "parent": "departments[0].members[0]",
+        "siblings": [
+          "departments[0].members[0].id",
+          "departments[0].members[0].name",
+          "departments[0].members[0].gender",
+          "departments[0].members[0].age",
+          "departments[0].members[0].phone",
+          "departments[0].members[0].email",
+          "departments[0].members[0].id_card",
+          "departments[0].members[0].province",
+          "departments[0].members[0].score",
+          "departments[0].members[0].created_at"
+        ]
+      },
+      "departments[0].members[0].province": {
+        "depth": 3,
+        "parent": "departments[0].members[0]",
+        "siblings": [
+          "departments[0].members[0].id",
+          "departments[0].members[0].name",
+          "departments[0].members[0].gender",
+          "departments[0].members[0].age",
+          "departments[0].members[0].phone",
+          "departments[0].members[0].email",
+          "departments[0].members[0].id_card",
+          "departments[0].members[0].address",
+          "departments[0].members[0].score",
+          "departments[0].members[0].created_at"
+        ]
+      },
+      "departments[0].members[0].score": {
+        "depth": 3,
+        "parent": "departments[0].members[0]",
+        "siblings": [
+          "departments[0].members[0].id",
+          "departments[0].members[0].name",
+          "departments[0].members[0].gender",
+          "departments[0].members[0].age",
+          "departments[0].members[0].phone",
+          "departments[0].members[0].email",
+          "departments[0].members[0].id_card",
+          "departments[0].members[0].address",
+          "departments[0].members[0].province",
+          "departments[0].members[0].created_at"
+        ]
+      },
+      "departments[0].members[0].created_at": {
+        "depth": 3,
+        "parent": "departments[0].members[0]",
+        "siblings": [
+          "departments[0].members[0].id",
+          "departments[0].members[0].name",
+          "departments[0].members[0].gender",
+          "departments[0].members[0].age",
+          "departments[0].members[0].phone",
+          "departments[0].members[0].email",
+          "departments[0].members[0].id_card",
+          "departments[0].members[0].address",
+          "departments[0].members[0].province",
+          "departments[0].members[0].score"
+        ]
+      },
+      "departments[0].members[1]": {
+        "depth": 2,
+        "parent": "departments[0].members",
+        "siblings": []
+      },
+      "departments[0].members[1].id": {
+        "depth": 3,
+        "parent": "departments[0].members[1]",
+        "siblings": [
+          "departments[0].members[1].name",
+          "departments[0].members[1].gender",
+          "departments[0].members[1].age",
+          "departments[0].members[1].phone",
+          "departments[0].members[1].email",
+          "departments[0].members[1].id_card",
+          "departments[0].members[1].address",
+          "departments[0].members[1].province",
+          "departments[0].members[1].score",
+          "departments[0].members[1].created_at"
+        ]
+      },
+      "departments[0].members[1].name": {
+        "depth": 3,
+        "parent": "departments[0].members[1]",
+        "siblings": [
+          "departments[0].members[1].id",
+          "departments[0].members[1].gender",
+          "departments[0].members[1].age",
+          "departments[0].members[1].phone",
+          "departments[0].members[1].email",
+          "departments[0].members[1].id_card",
+          "departments[0].members[1].address",
+          "departments[0].members[1].province",
+          "departments[0].members[1].score",
+          "departments[0].members[1].created_at"
+        ]
+      },
+      "departments[0].members[1].gender": {
+        "depth": 3,
+        "parent": "departments[0].members[1]",
+        "siblings": [
+          "departments[0].members[1].id",
+          "departments[0].members[1].name",
+          "departments[0].members[1].age",
+          "departments[0].members[1].phone",
+          "departments[0].members[1].email",
+          "departments[0].members[1].id_card",
+          "departments[0].members[1].address",
+          "departments[0].members[1].province",
+          "departments[0].members[1].score",
+          "departments[0].members[1].created_at"
+        ]
+      },
+      "departments[0].members[1].age": {
+        "depth": 3,
+        "parent": "departments[0].members[1]",
+        "siblings": [
+          "departments[0].members[1].id",
+          "departments[0].members[1].name",
+          "departments[0].members[1].gender",
+          "departments[0].members[1].phone",
+          "departments[0].members[1].email",
+          "departments[0].members[1].id_card",
+          "departments[0].members[1].address",
+          "departments[0].members[1].province",
+          "departments[0].members[1].score",
+          "departments[0].members[1].created_at"
+        ]
+      },
+      "departments[0].members[1].phone": {
+        "depth": 3,
+        "parent": "departments[0].members[1]",
+        "siblings": [
+          "departments[0].members[1].id",
+          "departments[0].members[1].name",
+          "departments[0].members[1].gender",
+          "departments[0].members[1].age",
+          "departments[0].members[1].email",
+          "departments[0].members[1].id_card",
+          "departments[0].members[1].address",
+          "departments[0].members[1].province",
+          "departments[0].members[1].score",
+          "departments[0].members[1].created_at"
+        ]
+      },
+      "departments[0].members[1].email": {
+        "depth": 3,
+        "parent": "departments[0].members[1]",
+        "siblings": [
+          "departments[0].members[1].id",
+          "departments[0].members[1].name",
+          "departments[0].members[1].gender",
+          "departments[0].members[1].age",
+          "departments[0].members[1].phone",
+          "departments[0].members[1].id_card",
+          "departments[0].members[1].address",
+          "departments[0].members[1].province",
+          "departments[0].members[1].score",
+          "departments[0].members[1].created_at"
+        ]
+      },
+      "departments[0].members[1].id_card": {
+        "depth": 3,
+        "parent": "departments[0].members[1]",
+        "siblings": [
+          "departments[0].members[1].id",
+          "departments[0].members[1].name",
+          "departments[0].members[1].gender",
+          "departments[0].members[1].age",
+          "departments[0].members[1].phone",
+          "departments[0].members[1].email",
+          "departments[0].members[1].address",
+          "departments[0].members[1].province",
+          "departments[0].members[1].score",
+          "departments[0].members[1].created_at"
+        ]
+      },
+      "departments[0].members[1].address": {
+        "depth": 3,
+        "parent": "departments[0].members[1]",
+        "siblings": [
+          "departments[0].members[1].id",
+          "departments[0].members[1].name",
+          "departments[0].members[1].gender",
+          "departments[0].members[1].age",
+          "departments[0].members[1].phone",
+          "departments[0].members[1].email",
+          "departments[0].members[1].id_card",
+          "departments[0].members[1].province",
+          "departments[0].members[1].score",
+          "departments[0].members[1].created_at"
+        ]
+      },
+      "departments[0].members[1].province": {
+        "depth": 3,
+        "parent": "departments[0].members[1]",
+        "siblings": [
+          "departments[0].members[1].id",
+          "departments[0].members[1].name",
+          "departments[0].members[1].gender",
+          "departments[0].members[1].age",
+          "departments[0].members[1].phone",
+          "departments[0].members[1].email",
+          "departments[0].members[1].id_card",
+          "departments[0].members[1].address",
+          "departments[0].members[1].score",
+          "departments[0].members[1].created_at"
+        ]
+      },
+      "departments[0].members[1].score": {
+        "depth": 3,
+        "parent": "departments[0].members[1]",
+        "siblings": [
+          "departments[0].members[1].id",
+          "departments[0].members[1].name",
+          "departments[0].members[1].gender",
+          "departments[0].members[1].age",
+          "departments[0].members[1].phone",
+          "departments[0].members[1].email",
+          "departments[0].members[1].id_card",
+          "departments[0].members[1].address",
+          "departments[0].members[1].province",
+          "departments[0].members[1].created_at"
+        ]
+      },
+      "departments[0].members[1].created_at": {
+        "depth": 3,
+        "parent": "departments[0].members[1]",
+        "siblings": [
+          "departments[0].members[1].id",
+          "departments[0].members[1].name",
+          "departments[0].members[1].gender",
+          "departments[0].members[1].age",
+          "departments[0].members[1].phone",
+          "departments[0].members[1].email",
+          "departments[0].members[1].id_card",
+          "departments[0].members[1].address",
+          "departments[0].members[1].province",
+          "departments[0].members[1].score"
+        ]
+      },
+      "departments[0].members[2]": {
+        "depth": 2,
+        "parent": "departments[0].members",
+        "siblings": []
+      },
+      "departments[0].members[2].id": {
+        "depth": 3,
+        "parent": "departments[0].members[2]",
+        "siblings": [
+          "departments[0].members[2].name",
+          "departments[0].members[2].gender",
+          "departments[0].members[2].age",
+          "departments[0].members[2].phone",
+          "departments[0].members[2].email",
+          "departments[0].members[2].id_card",
+          "departments[0].members[2].address",
+          "departments[0].members[2].province",
+          "departments[0].members[2].score",
+          "departments[0].members[2].created_at"
+        ]
+      },
+      "departments[0].members[2].name": {
+        "depth": 3,
+        "parent": "departments[0].members[2]",
+        "siblings": [
+          "departments[0].members[2].id",
+          "departments[0].members[2].gender",
+          "departments[0].members[2].age",
+          "departments[0].members[2].phone",
+          "departments[0].members[2].email",
+          "departments[0].members[2].id_card",
+          "departments[0].members[2].address",
+          "departments[0].members[2].province",
+          "departments[0].members[2].score",
+          "departments[0].members[2].created_at"
+        ]
+      },
+      "departments[0].members[2].gender": {
+        "depth": 3,
+        "parent": "departments[0].members[2]",
+        "siblings": [
+          "departments[0].members[2].id",
+          "departments[0].members[2].name",
+          "departments[0].members[2].age",
+          "departments[0].members[2].phone",
+          "departments[0].members[2].email",
+          "departments[0].members[2].id_card",
+          "departments[0].members[2].address",
+          "departments[0].members[2].province",
+          "departments[0].members[2].score",
+          "departments[0].members[2].created_at"
+        ]
+      },
+      "departments[0].members[2].age": {
+        "depth": 3,
+        "parent": "departments[0].members[2]",
+        "siblings": [
+          "departments[0].members[2].id",
+          "departments[0].members[2].name",
+          "departments[0].members[2].gender",
+          "departments[0].members[2].phone",
+          "departments[0].members[2].email",
+          "departments[0].members[2].id_card",
+          "departments[0].members[2].address",
+          "departments[0].members[2].province",
+          "departments[0].members[2].score",
+          "departments[0].members[2].created_at"
+        ]
+      },
+      "departments[0].members[2].phone": {
+        "depth": 3,
+        "parent": "departments[0].members[2]",
+        "siblings": [
+          "departments[0].members[2].id",
+          "departments[0].members[2].name",
+          "departments[0].members[2].gender",
+          "departments[0].members[2].age",
+          "departments[0].members[2].email",
+          "departments[0].members[2].id_card",
+          "departments[0].members[2].address",
+          "departments[0].members[2].province",
+          "departments[0].members[2].score",
+          "departments[0].members[2].created_at"
+        ]
+      },
+      "departments[0].members[2].email": {
+        "depth": 3,
+        "parent": "departments[0].members[2]",
+        "siblings": [
+          "departments[0].members[2].id",
+          "departments[0].members[2].name",
+          "departments[0].members[2].gender",
+          "departments[0].members[2].age",
+          "departments[0].members[2].phone",
+          "departments[0].members[2].id_card",
+          "departments[0].members[2].address",
+          "departments[0].members[2].province",
+          "departments[0].members[2].score",
+          "departments[0].members[2].created_at"
+        ]
+      },
+      "departments[0].members[2].id_card": {
+        "depth": 3,
+        "parent": "departments[0].members[2]",
+        "siblings": [
+          "departments[0].members[2].id",
+          "departments[0].members[2].name",
+          "departments[0].members[2].gender",
+          "departments[0].members[2].age",
+          "departments[0].members[2].phone",
+          "departments[0].members[2].email",
+          "departments[0].members[2].address",
+          "departments[0].members[2].province",
+          "departments[0].members[2].score",
+          "departments[0].members[2].created_at"
+        ]
+      },
+      "departments[0].members[2].address": {
+        "depth": 3,
+        "parent": "departments[0].members[2]",
+        "siblings": [
+          "departments[0].members[2].id",
+          "departments[0].members[2].name",
+          "departments[0].members[2].gender",
+          "departments[0].members[2].age",
+          "departments[0].members[2].phone",
+          "departments[0].members[2].email",
+          "departments[0].members[2].id_card",
+          "departments[0].members[2].province",
+          "departments[0].members[2].score",
+          "departments[0].members[2].created_at"
+        ]
+      },
+      "departments[0].members[2].province": {
+        "depth": 3,
+        "parent": "departments[0].members[2]",
+        "siblings": [
+          "departments[0].members[2].id",
+          "departments[0].members[2].name",
+          "departments[0].members[2].gender",
+          "departments[0].members[2].age",
+          "departments[0].members[2].phone",
+          "departments[0].members[2].email",
+          "departments[0].members[2].id_card",
+          "departments[0].members[2].address",
+          "departments[0].members[2].score",
+          "departments[0].members[2].created_at"
+        ]
+      },
+      "departments[0].members[2].score": {
+        "depth": 3,
+        "parent": "departments[0].members[2]",
+        "siblings": [
+          "departments[0].members[2].id",
+          "departments[0].members[2].name",
+          "departments[0].members[2].gender",
+          "departments[0].members[2].age",
+          "departments[0].members[2].phone",
+          "departments[0].members[2].email",
+          "departments[0].members[2].id_card",
+          "departments[0].members[2].address",
+          "departments[0].members[2].province",
+          "departments[0].members[2].created_at"
+        ]
+      },
+      "departments[0].members[2].created_at": {
+        "depth": 3,
+        "parent": "departments[0].members[2]",
+        "siblings": [
+          "departments[0].members[2].id",
+          "departments[0].members[2].name",
+          "departments[0].members[2].gender",
+          "departments[0].members[2].age",
+          "departments[0].members[2].phone",
+          "departments[0].members[2].email",
+          "departments[0].members[2].id_card",
+          "departments[0].members[2].address",
+          "departments[0].members[2].province",
+          "departments[0].members[2].score"
+        ]
+      },
+      "departments[0].members[3]": {
+        "depth": 2,
+        "parent": "departments[0].members",
+        "siblings": []
+      },
+      "departments[0].members[3].id": {
+        "depth": 3,
+        "parent": "departments[0].members[3]",
+        "siblings": [
+          "departments[0].members[3].name",
+          "departments[0].members[3].gender",
+          "departments[0].members[3].age",
+          "departments[0].members[3].phone",
+          "departments[0].members[3].email",
+          "departments[0].members[3].id_card",
+          "departments[0].members[3].address",
+          "departments[0].members[3].province",
+          "departments[0].members[3].score",
+          "departments[0].members[3].created_at"
+        ]
+      },
+      "departments[0].members[3].name": {
+        "depth": 3,
+        "parent": "departments[0].members[3]",
+        "siblings": [
+          "departments[0].members[3].id",
+          "departments[0].members[3].gender",
+          "departments[0].members[3].age",
+          "departments[0].members[3].phone",
+          "departments[0].members[3].email",
+          "departments[0].members[3].id_card",
+          "departments[0].members[3].address",
+          "departments[0].members[3].province",
+          "departments[0].members[3].score",
+          "departments[0].members[3].created_at"
+        ]
+      },
+      "departments[0].members[3].gender": {
+        "depth": 3,
+        "parent": "departments[0].members[3]",
+        "siblings": [
+          "departments[0].members[3].id",
+          "departments[0].members[3].name",
+          "departments[0].members[3].age",
+          "departments[0].members[3].phone",
+          "departments[0].members[3].email",
+          "departments[0].members[3].id_card",
+          "departments[0].members[3].address",
+          "departments[0].members[3].province",
+          "departments[0].members[3].score",
+          "departments[0].members[3].created_at"
+        ]
+      },
+      "departments[0].members[3].age": {
+        "depth": 3,
+        "parent": "departments[0].members[3]",
+        "siblings": [
+          "departments[0].members[3].id",
+          "departments[0].members[3].name",
+          "departments[0].members[3].gender",
+          "departments[0].members[3].phone",
+          "departments[0].members[3].email",
+          "departments[0].members[3].id_card",
+          "departments[0].members[3].address",
+          "departments[0].members[3].province",
+          "departments[0].members[3].score",
+          "departments[0].members[3].created_at"
+        ]
+      },
+      "departments[0].members[3].phone": {
+        "depth": 3,
+        "parent": "departments[0].members[3]",
+        "siblings": [
+          "departments[0].members[3].id",
+          "departments[0].members[3].name",
+          "departments[0].members[3].gender",
+          "departments[0].members[3].age",
+          "departments[0].members[3].email",
+          "departments[0].members[3].id_card",
+          "departments[0].members[3].address",
+          "departments[0].members[3].province",
+          "departments[0].members[3].score",
+          "departments[0].members[3].created_at"
+        ]
+      },
+      "departments[0].members[3].email": {
+        "depth": 3,
+        "parent": "departments[0].members[3]",
+        "siblings": [
+          "departments[0].members[3].id",
+          "departments[0].members[3].name",
+          "departments[0].members[3].gender",
+          "departments[0].members[3].age",
+          "departments[0].members[3].phone",
+          "departments[0].members[3].id_card",
+          "departments[0].members[3].address",
+          "departments[0].members[3].province",
+          "departments[0].members[3].score",
+          "departments[0].members[3].created_at"
+        ]
+      },
+      "departments[0].members[3].id_card": {
+        "depth": 3,
+        "parent": "departments[0].members[3]",
+        "siblings": [
+          "departments[0].members[3].id",
+          "departments[0].members[3].name",
+          "departments[0].members[3].gender",
+          "departments[0].members[3].age",
+          "departments[0].members[3].phone",
+          "departments[0].members[3].email",
+          "departments[0].members[3].address",
+          "departments[0].members[3].province",
+          "departments[0].members[3].score",
+          "departments[0].members[3].created_at"
+        ]
+      },
+      "departments[0].members[3].address": {
+        "depth": 3,
+        "parent": "departments[0].members[3]",
+        "siblings": [
+          "departments[0].members[3].id",
+          "departments[0].members[3].name",
+          "departments[0].members[3].gender",
+          "departments[0].members[3].age",
+          "departments[0].members[3].phone",
+          "departments[0].members[3].email",
+          "departments[0].members[3].id_card",
+          "departments[0].members[3].province",
+          "departments[0].members[3].score",
+          "departments[0].members[3].created_at"
+        ]
+      },
+      "departments[0].members[3].province": {
+        "depth": 3,
+        "parent": "departments[0].members[3]",
+        "siblings": [
+          "departments[0].members[3].id",
+          "departments[0].members[3].name",
+          "departments[0].members[3].gender",
+          "departments[0].members[3].age",
+          "departments[0].members[3].phone",
+          "departments[0].members[3].email",
+          "departments[0].members[3].id_card",
+          "departments[0].members[3].address",
+          "departments[0].members[3].score",
+          "departments[0].members[3].created_at"
+        ]
+      },
+      "departments[0].members[3].score": {
+        "depth": 3,
+        "parent": "departments[0].members[3]",
+        "siblings": [
+          "departments[0].members[3].id",
+          "departments[0].members[3].name",
+          "departments[0].members[3].gender",
+          "departments[0].members[3].age",
+          "departments[0].members[3].phone",
+          "departments[0].members[3].email",
+          "departments[0].members[3].id_card",
+          "departments[0].members[3].address",
+          "departments[0].members[3].province",
+          "departments[0].members[3].created_at"
+        ]
+      },
+      "departments[0].members[3].created_at": {
+        "depth": 3,
+        "parent": "departments[0].members[3]",
+        "siblings": [
+          "departments[0].members[3].id",
+          "departments[0].members[3].name",
+          "departments[0].members[3].gender",
+          "departments[0].members[3].age",
+          "departments[0].members[3].phone",
+          "departments[0].members[3].email",
+          "departments[0].members[3].id_card",
+          "departments[0].members[3].address",
+          "departments[0].members[3].province",
+          "departments[0].members[3].score"
+        ]
+      },
+      "departments[1]": {
+        "depth": 1,
+        "parent": "departments",
+        "siblings": []
+      },
+      "departments[1].name": {
+        "depth": 2,
+        "parent": "departments[1]",
+        "siblings": [
+          "departments[1].manager",
+          "departments[1].members"
+        ]
+      },
+      "departments[1].manager": {
+        "depth": 2,
+        "parent": "departments[1]",
+        "siblings": [
+          "departments[1].name",
+          "departments[1].members"
+        ]
+      },
+      "departments[1].manager.id": {
+        "depth": 3,
+        "parent": "departments[1].manager",
+        "siblings": [
+          "departments[1].manager.name",
+          "departments[1].manager.gender",
+          "departments[1].manager.age",
+          "departments[1].manager.phone",
+          "departments[1].manager.email",
+          "departments[1].manager.id_card",
+          "departments[1].manager.address",
+          "departments[1].manager.province",
+          "departments[1].manager.score",
+          "departments[1].manager.created_at"
+        ]
+      },
+      "departments[1].manager.name": {
+        "depth": 3,
+        "parent": "departments[1].manager",
+        "siblings": [
+          "departments[1].manager.id",
+          "departments[1].manager.gender",
+          "departments[1].manager.age",
+          "departments[1].manager.phone",
+          "departments[1].manager.email",
+          "departments[1].manager.id_card",
+          "departments[1].manager.address",
+          "departments[1].manager.province",
+          "departments[1].manager.score",
+          "departments[1].manager.created_at"
+        ]
+      },
+      "departments[1].manager.gender": {
+        "depth": 3,
+        "parent": "departments[1].manager",
+        "siblings": [
+          "departments[1].manager.id",
+          "departments[1].manager.name",
+          "departments[1].manager.age",
+          "departments[1].manager.phone",
+          "departments[1].manager.email",
+          "departments[1].manager.id_card",
+          "departments[1].manager.address",
+          "departments[1].manager.province",
+          "departments[1].manager.score",
+          "departments[1].manager.created_at"
+        ]
+      },
+      "departments[1].manager.age": {
+        "depth": 3,
+        "parent": "departments[1].manager",
+        "siblings": [
+          "departments[1].manager.id",
+          "departments[1].manager.name",
+          "departments[1].manager.gender",
+          "departments[1].manager.phone",
+          "departments[1].manager.email",
+          "departments[1].manager.id_card",
+          "departments[1].manager.address",
+          "departments[1].manager.province",
+          "departments[1].manager.score",
+          "departments[1].manager.created_at"
+        ]
+      },
+      "departments[1].manager.phone": {
+        "depth": 3,
+        "parent": "departments[1].manager",
+        "siblings": [
+          "departments[1].manager.id",
+          "departments[1].manager.name",
+          "departments[1].manager.gender",
+          "departments[1].manager.age",
+          "departments[1].manager.email",
+          "departments[1].manager.id_card",
+          "departments[1].manager.address",
+          "departments[1].manager.province",
+          "departments[1].manager.score",
+          "departments[1].manager.created_at"
+        ]
+      },
+      "departments[1].manager.email": {
+        "depth": 3,
+        "parent": "departments[1].manager",
+        "siblings": [
+          "departments[1].manager.id",
+          "departments[1].manager.name",
+          "departments[1].manager.gender",
+          "departments[1].manager.age",
+          "departments[1].manager.phone",
+          "departments[1].manager.id_card",
+          "departments[1].manager.address",
+          "departments[1].manager.province",
+          "departments[1].manager.score",
+          "departments[1].manager.created_at"
+        ]
+      },
+      "departments[1].manager.id_card": {
+        "depth": 3,
+        "parent": "departments[1].manager",
+        "siblings": [
+          "departments[1].manager.id",
+          "departments[1].manager.name",
+          "departments[1].manager.gender",
+          "departments[1].manager.age",
+          "departments[1].manager.phone",
+          "departments[1].manager.email",
+          "departments[1].manager.address",
+          "departments[1].manager.province",
+          "departments[1].manager.score",
+          "departments[1].manager.created_at"
+        ]
+      },
+      "departments[1].manager.address": {
+        "depth": 3,
+        "parent": "departments[1].manager",
+        "siblings": [
+          "departments[1].manager.id",
+          "departments[1].manager.name",
+          "departments[1].manager.gender",
+          "departments[1].manager.age",
+          "departments[1].manager.phone",
+          "departments[1].manager.email",
+          "departments[1].manager.id_card",
+          "departments[1].manager.province",
+          "departments[1].manager.score",
+          "departments[1].manager.created_at"
+        ]
+      },
+      "departments[1].manager.province": {
+        "depth": 3,
+        "parent": "departments[1].manager",
+        "siblings": [
+          "departments[1].manager.id",
+          "departments[1].manager.name",
+          "departments[1].manager.gender",
+          "departments[1].manager.age",
+          "departments[1].manager.phone",
+          "departments[1].manager.email",
+          "departments[1].manager.id_card",
+          "departments[1].manager.address",
+          "departments[1].manager.score",
+          "departments[1].manager.created_at"
+        ]
+      },
+      "departments[1].manager.score": {
+        "depth": 3,
+        "parent": "departments[1].manager",
+        "siblings": [
+          "departments[1].manager.id",
+          "departments[1].manager.name",
+          "departments[1].manager.gender",
+          "departments[1].manager.age",
+          "departments[1].manager.phone",
+          "departments[1].manager.email",
+          "departments[1].manager.id_card",
+          "departments[1].manager.address",
+          "departments[1].manager.province",
+          "departments[1].manager.created_at"
+        ]
+      },
+      "departments[1].manager.created_at": {
+        "depth": 3,
+        "parent": "departments[1].manager",
+        "siblings": [
+          "departments[1].manager.id",
+          "departments[1].manager.name",
+          "departments[1].manager.gender",
+          "departments[1].manager.age",
+          "departments[1].manager.phone",
+          "departments[1].manager.email",
+          "departments[1].manager.id_card",
+          "departments[1].manager.address",
+          "departments[1].manager.province",
+          "departments[1].manager.score"
+        ]
+      },
+      "departments[1].members": {
+        "depth": 2,
+        "parent": "departments[1]",
+        "siblings": [
+          "departments[1].name",
+          "departments[1].manager"
+        ]
+      },
+      "departments[1].members[0]": {
+        "depth": 2,
+        "parent": "departments[1].members",
+        "siblings": []
+      },
+      "departments[1].members[0].id": {
+        "depth": 3,
+        "parent": "departments[1].members[0]",
+        "siblings": [
+          "departments[1].members[0].name",
+          "departments[1].members[0].gender",
+          "departments[1].members[0].age",
+          "departments[1].members[0].phone",
+          "departments[1].members[0].email",
+          "departments[1].members[0].id_card",
+          "departments[1].members[0].address",
+          "departments[1].members[0].province",
+          "departments[1].members[0].score",
+          "departments[1].members[0].created_at"
+        ]
+      },
+      "departments[1].members[0].name": {
+        "depth": 3,
+        "parent": "departments[1].members[0]",
+        "siblings": [
+          "departments[1].members[0].id",
+          "departments[1].members[0].gender",
+          "departments[1].members[0].age",
+          "departments[1].members[0].phone",
+          "departments[1].members[0].email",
+          "departments[1].members[0].id_card",
+          "departments[1].members[0].address",
+          "departments[1].members[0].province",
+          "departments[1].members[0].score",
+          "departments[1].members[0].created_at"
+        ]
+      },
+      "departments[1].members[0].gender": {
+        "depth": 3,
+        "parent": "departments[1].members[0]",
+        "siblings": [
+          "departments[1].members[0].id",
+          "departments[1].members[0].name",
+          "departments[1].members[0].age",
+          "departments[1].members[0].phone",
+          "departments[1].members[0].email",
+          "departments[1].members[0].id_card",
+          "departments[1].members[0].address",
+          "departments[1].members[0].province",
+          "departments[1].members[0].score",
+          "departments[1].members[0].created_at"
+        ]
+      },
+      "departments[1].members[0].age": {
+        "depth": 3,
+        "parent": "departments[1].members[0]",
+        "siblings": [
+          "departments[1].members[0].id",
+          "departments[1].members[0].name",
+          "departments[1].members[0].gender",
+          "departments[1].members[0].phone",
+          "departments[1].members[0].email",
+          "departments[1].members[0].id_card",
+          "departments[1].members[0].address",
+          "departments[1].members[0].province",
+          "departments[1].members[0].score",
+          "departments[1].members[0].created_at"
+        ]
+      },
+      "departments[1].members[0].phone": {
+        "depth": 3,
+        "parent": "departments[1].members[0]",
+        "siblings": [
+          "departments[1].members[0].id",
+          "departments[1].members[0].name",
+          "departments[1].members[0].gender",
+          "departments[1].members[0].age",
+          "departments[1].members[0].email",
+          "departments[1].members[0].id_card",
+          "departments[1].members[0].address",
+          "departments[1].members[0].province",
+          "departments[1].members[0].score",
+          "departments[1].members[0].created_at"
+        ]
+      },
+      "departments[1].members[0].email": {
+        "depth": 3,
+        "parent": "departments[1].members[0]",
+        "siblings": [
+          "departments[1].members[0].id",
+          "departments[1].members[0].name",
+          "departments[1].members[0].gender",
+          "departments[1].members[0].age",
+          "departments[1].members[0].phone",
+          "departments[1].members[0].id_card",
+          "departments[1].members[0].address",
+          "departments[1].members[0].province",
+          "departments[1].members[0].score",
+          "departments[1].members[0].created_at"
+        ]
+      },
+      "departments[1].members[0].id_card": {
+        "depth": 3,
+        "parent": "departments[1].members[0]",
+        "siblings": [
+          "departments[1].members[0].id",
+          "departments[1].members[0].name",
+          "departments[1].members[0].gender",
+          "departments[1].members[0].age",
+          "departments[1].members[0].phone",
+          "departments[1].members[0].email",
+          "departments[1].members[0].address",
+          "departments[1].members[0].province",
+          "departments[1].members[0].score",
+          "departments[1].members[0].created_at"
+        ]
+      },
+      "departments[1].members[0].address": {
+        "depth": 3,
+        "parent": "departments[1].members[0]",
+        "siblings": [
+          "departments[1].members[0].id",
+          "departments[1].members[0].name",
+          "departments[1].members[0].gender",
+          "departments[1].members[0].age",
+          "departments[1].members[0].phone",
+          "departments[1].members[0].email",
+          "departments[1].members[0].id_card",
+          "departments[1].members[0].province",
+          "departments[1].members[0].score",
+          "departments[1].members[0].created_at"
+        ]
+      },
+      "departments[1].members[0].province": {
+        "depth": 3,
+        "parent": "departments[1].members[0]",
+        "siblings": [
+          "departments[1].members[0].id",
+          "departments[1].members[0].name",
+          "departments[1].members[0].gender",
+          "departments[1].members[0].age",
+          "departments[1].members[0].phone",
+          "departments[1].members[0].email",
+          "departments[1].members[0].id_card",
+          "departments[1].members[0].address",
+          "departments[1].members[0].score",
+          "departments[1].members[0].created_at"
+        ]
+      },
+      "departments[1].members[0].score": {
+        "depth": 3,
+        "parent": "departments[1].members[0]",
+        "siblings": [
+          "departments[1].members[0].id",
+          "departments[1].members[0].name",
+          "departments[1].members[0].gender",
+          "departments[1].members[0].age",
+          "departments[1].members[0].phone",
+          "departments[1].members[0].email",
+          "departments[1].members[0].id_card",
+          "departments[1].members[0].address",
+          "departments[1].members[0].province",
+          "departments[1].members[0].created_at"
+        ]
+      },
+      "departments[1].members[0].created_at": {
+        "depth": 3,
+        "parent": "departments[1].members[0]",
+        "siblings": [
+          "departments[1].members[0].id",
+          "departments[1].members[0].name",
+          "departments[1].members[0].gender",
+          "departments[1].members[0].age",
+          "departments[1].members[0].phone",
+          "departments[1].members[0].email",
+          "departments[1].members[0].id_card",
+          "departments[1].members[0].address",
+          "departments[1].members[0].province",
+          "departments[1].members[0].score"
+        ]
+      },
+      "departments[1].members[1]": {
+        "depth": 2,
+        "parent": "departments[1].members",
+        "siblings": []
+      },
+      "departments[1].members[1].id": {
+        "depth": 3,
+        "parent": "departments[1].members[1]",
+        "siblings": [
+          "departments[1].members[1].name",
+          "departments[1].members[1].gender",
+          "departments[1].members[1].age",
+          "departments[1].members[1].phone",
+          "departments[1].members[1].email",
+          "departments[1].members[1].id_card",
+          "departments[1].members[1].address",
+          "departments[1].members[1].province",
+          "departments[1].members[1].score",
+          "departments[1].members[1].created_at"
+        ]
+      },
+      "departments[1].members[1].name": {
+        "depth": 3,
+        "parent": "departments[1].members[1]",
+        "siblings": [
+          "departments[1].members[1].id",
+          "departments[1].members[1].gender",
+          "departments[1].members[1].age",
+          "departments[1].members[1].phone",
+          "departments[1].members[1].email",
+          "departments[1].members[1].id_card",
+          "departments[1].members[1].address",
+          "departments[1].members[1].province",
+          "departments[1].members[1].score",
+          "departments[1].members[1].created_at"
+        ]
+      },
+      "departments[1].members[1].gender": {
+        "depth": 3,
+        "parent": "departments[1].members[1]",
+        "siblings": [
+          "departments[1].members[1].id",
+          "departments[1].members[1].name",
+          "departments[1].members[1].age",
+          "departments[1].members[1].phone",
+          "departments[1].members[1].email",
+          "departments[1].members[1].id_card",
+          "departments[1].members[1].address",
+          "departments[1].members[1].province",
+          "departments[1].members[1].score",
+          "departments[1].members[1].created_at"
+        ]
+      },
+      "departments[1].members[1].age": {
+        "depth": 3,
+        "parent": "departments[1].members[1]",
+        "siblings": [
+          "departments[1].members[1].id",
+          "departments[1].members[1].name",
+          "departments[1].members[1].gender",
+          "departments[1].members[1].phone",
+          "departments[1].members[1].email",
+          "departments[1].members[1].id_card",
+          "departments[1].members[1].address",
+          "departments[1].members[1].province",
+          "departments[1].members[1].score",
+          "departments[1].members[1].created_at"
+        ]
+      },
+      "departments[1].members[1].phone": {
+        "depth": 3,
+        "parent": "departments[1].members[1]",
+        "siblings": [
+          "departments[1].members[1].id",
+          "departments[1].members[1].name",
+          "departments[1].members[1].gender",
+          "departments[1].members[1].age",
+          "departments[1].members[1].email",
+          "departments[1].members[1].id_card",
+          "departments[1].members[1].address",
+          "departments[1].members[1].province",
+          "departments[1].members[1].score",
+          "departments[1].members[1].created_at"
+        ]
+      },
+      "departments[1].members[1].email": {
+        "depth": 3,
+        "parent": "departments[1].members[1]",
+        "siblings": [
+          "departments[1].members[1].id",
+          "departments[1].members[1].name",
+          "departments[1].members[1].gender",
+          "departments[1].members[1].age",
+          "departments[1].members[1].phone",
+          "departments[1].members[1].id_card",
+          "departments[1].members[1].address",
+          "departments[1].members[1].province",
+          "departments[1].members[1].score",
+          "departments[1].members[1].created_at"
+        ]
+      },
+      "departments[1].members[1].id_card": {
+        "depth": 3,
+        "parent": "departments[1].members[1]",
+        "siblings": [
+          "departments[1].members[1].id",
+          "departments[1].members[1].name",
+          "departments[1].members[1].gender",
+          "departments[1].members[1].age",
+          "departments[1].members[1].phone",
+          "departments[1].members[1].email",
+          "departments[1].members[1].address",
+          "departments[1].members[1].province",
+          "departments[1].members[1].score",
+          "departments[1].members[1].created_at"
+        ]
+      },
+      "departments[1].members[1].address": {
+        "depth": 3,
+        "parent": "departments[1].members[1]",
+        "siblings": [
+          "departments[1].members[1].id",
+          "departments[1].members[1].name",
+          "departments[1].members[1].gender",
+          "departments[1].members[1].age",
+          "departments[1].members[1].phone",
+          "departments[1].members[1].email",
+          "departments[1].members[1].id_card",
+          "departments[1].members[1].province",
+          "departments[1].members[1].score",
+          "departments[1].members[1].created_at"
+        ]
+      },
+      "departments[1].members[1].province": {
+        "depth": 3,
+        "parent": "departments[1].members[1]",
+        "siblings": [
+          "departments[1].members[1].id",
+          "departments[1].members[1].name",
+          "departments[1].members[1].gender",
+          "departments[1].members[1].age",
+          "departments[1].members[1].phone",
+          "departments[1].members[1].email",
+          "departments[1].members[1].id_card",
+          "departments[1].members[1].address",
+          "departments[1].members[1].score",
+          "departments[1].members[1].created_at"
+        ]
+      },
+      "departments[1].members[1].score": {
+        "depth": 3,
+        "parent": "departments[1].members[1]",
+        "siblings": [
+          "departments[1].members[1].id",
+          "departments[1].members[1].name",
+          "departments[1].members[1].gender",
+          "departments[1].members[1].age",
+          "departments[1].members[1].phone",
+          "departments[1].members[1].email",
+          "departments[1].members[1].id_card",
+          "departments[1].members[1].address",
+          "departments[1].members[1].province",
+          "departments[1].members[1].created_at"
+        ]
+      },
+      "departments[1].members[1].created_at": {
+        "depth": 3,
+        "parent": "departments[1].members[1]",
+        "siblings": [
+          "departments[1].members[1].id",
+          "departments[1].members[1].name",
+          "departments[1].members[1].gender",
+          "departments[1].members[1].age",
+          "departments[1].members[1].phone",
+          "departments[1].members[1].email",
+          "departments[1].members[1].id_card",
+          "departments[1].members[1].address",
+          "departments[1].members[1].province",
+          "departments[1].members[1].score"
+        ]
+      },
+      "departments[1].members[2]": {
+        "depth": 2,
+        "parent": "departments[1].members",
+        "siblings": []
+      },
+      "departments[1].members[2].id": {
+        "depth": 3,
+        "parent": "departments[1].members[2]",
+        "siblings": [
+          "departments[1].members[2].name",
+          "departments[1].members[2].gender",
+          "departments[1].members[2].age",
+          "departments[1].members[2].phone",
+          "departments[1].members[2].email",
+          "departments[1].members[2].id_card",
+          "departments[1].members[2].address",
+          "departments[1].members[2].province",
+          "departments[1].members[2].score",
+          "departments[1].members[2].created_at"
+        ]
+      },
+      "departments[1].members[2].name": {
+        "depth": 3,
+        "parent": "departments[1].members[2]",
+        "siblings": [
+          "departments[1].members[2].id",
+          "departments[1].members[2].gender",
+          "departments[1].members[2].age",
+          "departments[1].members[2].phone",
+          "departments[1].members[2].email",
+          "departments[1].members[2].id_card",
+          "departments[1].members[2].address",
+          "departments[1].members[2].province",
+          "departments[1].members[2].score",
+          "departments[1].members[2].created_at"
+        ]
+      },
+      "departments[1].members[2].gender": {
+        "depth": 3,
+        "parent": "departments[1].members[2]",
+        "siblings": [
+          "departments[1].members[2].id",
+          "departments[1].members[2].name",
+          "departments[1].members[2].age",
+          "departments[1].members[2].phone",
+          "departments[1].members[2].email",
+          "departments[1].members[2].id_card",
+          "departments[1].members[2].address",
+          "departments[1].members[2].province",
+          "departments[1].members[2].score",
+          "departments[1].members[2].created_at"
+        ]
+      },
+      "departments[1].members[2].age": {
+        "depth": 3,
+        "parent": "departments[1].members[2]",
+        "siblings": [
+          "departments[1].members[2].id",
+          "departments[1].members[2].name",
+          "departments[1].members[2].gender",
+          "departments[1].members[2].phone",
+          "departments[1].members[2].email",
+          "departments[1].members[2].id_card",
+          "departments[1].members[2].address",
+          "departments[1].members[2].province",
+          "departments[1].members[2].score",
+          "departments[1].members[2].created_at"
+        ]
+      },
+      "departments[1].members[2].phone": {
+        "depth": 3,
+        "parent": "departments[1].members[2]",
+        "siblings": [
+          "departments[1].members[2].id",
+          "departments[1].members[2].name",
+          "departments[1].members[2].gender",
+          "departments[1].members[2].age",
+          "departments[1].members[2].email",
+          "departments[1].members[2].id_card",
+          "departments[1].members[2].address",
+          "departments[1].members[2].province",
+          "departments[1].members[2].score",
+          "departments[1].members[2].created_at"
+        ]
+      },
+      "departments[1].members[2].email": {
+        "depth": 3,
+        "parent": "departments[1].members[2]",
+        "siblings": [
+          "departments[1].members[2].id",
+          "departments[1].members[2].name",
+          "departments[1].members[2].gender",
+          "departments[1].members[2].age",
+          "departments[1].members[2].phone",
+          "departments[1].members[2].id_card",
+          "departments[1].members[2].address",
+          "departments[1].members[2].province",
+          "departments[1].members[2].score",
+          "departments[1].members[2].created_at"
+        ]
+      },
+      "departments[1].members[2].id_card": {
+        "depth": 3,
+        "parent": "departments[1].members[2]",
+        "siblings": [
+          "departments[1].members[2].id",
+          "departments[1].members[2].name",
+          "departments[1].members[2].gender",
+          "departments[1].members[2].age",
+          "departments[1].members[2].phone",
+          "departments[1].members[2].email",
+          "departments[1].members[2].address",
+          "departments[1].members[2].province",
+          "departments[1].members[2].score",
+          "departments[1].members[2].created_at"
+        ]
+      },
+      "departments[1].members[2].address": {
+        "depth": 3,
+        "parent": "departments[1].members[2]",
+        "siblings": [
+          "departments[1].members[2].id",
+          "departments[1].members[2].name",
+          "departments[1].members[2].gender",
+          "departments[1].members[2].age",
+          "departments[1].members[2].phone",
+          "departments[1].members[2].email",
+          "departments[1].members[2].id_card",
+          "departments[1].members[2].province",
+          "departments[1].members[2].score",
+          "departments[1].members[2].created_at"
+        ]
+      },
+      "departments[1].members[2].province": {
+        "depth": 3,
+        "parent": "departments[1].members[2]",
+        "siblings": [
+          "departments[1].members[2].id",
+          "departments[1].members[2].name",
+          "departments[1].members[2].gender",
+          "departments[1].members[2].age",
+          "departments[1].members[2].phone",
+          "departments[1].members[2].email",
+          "departments[1].members[2].id_card",
+          "departments[1].members[2].address",
+          "departments[1].members[2].score",
+          "departments[1].members[2].created_at"
+        ]
+      },
+      "departments[1].members[2].score": {
+        "depth": 3,
+        "parent": "departments[1].members[2]",
+        "siblings": [
+          "departments[1].members[2].id",
+          "departments[1].members[2].name",
+          "departments[1].members[2].gender",
+          "departments[1].members[2].age",
+          "departments[1].members[2].phone",
+          "departments[1].members[2].email",
+          "departments[1].members[2].id_card",
+          "departments[1].members[2].address",
+          "departments[1].members[2].province",
+          "departments[1].members[2].created_at"
+        ]
+      },
+      "departments[1].members[2].created_at": {
+        "depth": 3,
+        "parent": "departments[1].members[2]",
+        "siblings": [
+          "departments[1].members[2].id",
+          "departments[1].members[2].name",
+          "departments[1].members[2].gender",
+          "departments[1].members[2].age",
+          "departments[1].members[2].phone",
+          "departments[1].members[2].email",
+          "departments[1].members[2].id_card",
+          "departments[1].members[2].address",
+          "departments[1].members[2].province",
+          "departments[1].members[2].score"
+        ]
+      },
+      "departments[1].members[3]": {
+        "depth": 2,
+        "parent": "departments[1].members",
+        "siblings": []
+      },
+      "departments[1].members[3].id": {
+        "depth": 3,
+        "parent": "departments[1].members[3]",
+        "siblings": [
+          "departments[1].members[3].name",
+          "departments[1].members[3].gender",
+          "departments[1].members[3].age",
+          "departments[1].members[3].phone",
+          "departments[1].members[3].email",
+          "departments[1].members[3].id_card",
+          "departments[1].members[3].address",
+          "departments[1].members[3].province",
+          "departments[1].members[3].score",
+          "departments[1].members[3].created_at"
+        ]
+      },
+      "departments[1].members[3].name": {
+        "depth": 3,
+        "parent": "departments[1].members[3]",
+        "siblings": [
+          "departments[1].members[3].id",
+          "departments[1].members[3].gender",
+          "departments[1].members[3].age",
+          "departments[1].members[3].phone",
+          "departments[1].members[3].email",
+          "departments[1].members[3].id_card",
+          "departments[1].members[3].address",
+          "departments[1].members[3].province",
+          "departments[1].members[3].score",
+          "departments[1].members[3].created_at"
+        ]
+      },
+      "departments[1].members[3].gender": {
+        "depth": 3,
+        "parent": "departments[1].members[3]",
+        "siblings": [
+          "departments[1].members[3].id",
+          "departments[1].members[3].name",
+          "departments[1].members[3].age",
+          "departments[1].members[3].phone",
+          "departments[1].members[3].email",
+          "departments[1].members[3].id_card",
+          "departments[1].members[3].address",
+          "departments[1].members[3].province",
+          "departments[1].members[3].score",
+          "departments[1].members[3].created_at"
+        ]
+      },
+      "departments[1].members[3].age": {
+        "depth": 3,
+        "parent": "departments[1].members[3]",
+        "siblings": [
+          "departments[1].members[3].id",
+          "departments[1].members[3].name",
+          "departments[1].members[3].gender",
+          "departments[1].members[3].phone",
+          "departments[1].members[3].email",
+          "departments[1].members[3].id_card",
+          "departments[1].members[3].address",
+          "departments[1].members[3].province",
+          "departments[1].members[3].score",
+          "departments[1].members[3].created_at"
+        ]
+      },
+      "departments[1].members[3].phone": {
+        "depth": 3,
+        "parent": "departments[1].members[3]",
+        "siblings": [
+          "departments[1].members[3].id",
+          "departments[1].members[3].name",
+          "departments[1].members[3].gender",
+          "departments[1].members[3].age",
+          "departments[1].members[3].email",
+          "departments[1].members[3].id_card",
+          "departments[1].members[3].address",
+          "departments[1].members[3].province",
+          "departments[1].members[3].score",
+          "departments[1].members[3].created_at"
+        ]
+      },
+      "departments[1].members[3].email": {
+        "depth": 3,
+        "parent": "departments[1].members[3]",
+        "siblings": [
+          "departments[1].members[3].id",
+          "departments[1].members[3].name",
+          "departments[1].members[3].gender",
+          "departments[1].members[3].age",
+          "departments[1].members[3].phone",
+          "departments[1].members[3].id_card",
+          "departments[1].members[3].address",
+          "departments[1].members[3].province",
+          "departments[1].members[3].score",
+          "departments[1].members[3].created_at"
+        ]
+      },
+      "departments[1].members[3].id_card": {
+        "depth": 3,
+        "parent": "departments[1].members[3]",
+        "siblings": [
+          "departments[1].members[3].id",
+          "departments[1].members[3].name",
+          "departments[1].members[3].gender",
+          "departments[1].members[3].age",
+          "departments[1].members[3].phone",
+          "departments[1].members[3].email",
+          "departments[1].members[3].address",
+          "departments[1].members[3].province",
+          "departments[1].members[3].score",
+          "departments[1].members[3].created_at"
+        ]
+      },
+      "departments[1].members[3].address": {
+        "depth": 3,
+        "parent": "departments[1].members[3]",
+        "siblings": [
+          "departments[1].members[3].id",
+          "departments[1].members[3].name",
+          "departments[1].members[3].gender",
+          "departments[1].members[3].age",
+          "departments[1].members[3].phone",
+          "departments[1].members[3].email",
+          "departments[1].members[3].id_card",
+          "departments[1].members[3].province",
+          "departments[1].members[3].score",
+          "departments[1].members[3].created_at"
+        ]
+      },
+      "departments[1].members[3].province": {
+        "depth": 3,
+        "parent": "departments[1].members[3]",
+        "siblings": [
+          "departments[1].members[3].id",
+          "departments[1].members[3].name",
+          "departments[1].members[3].gender",
+          "departments[1].members[3].age",
+          "departments[1].members[3].phone",
+          "departments[1].members[3].email",
+          "departments[1].members[3].id_card",
+          "departments[1].members[3].address",
+          "departments[1].members[3].score",
+          "departments[1].members[3].created_at"
+        ]
+      },
+      "departments[1].members[3].score": {
+        "depth": 3,
+        "parent": "departments[1].members[3]",
+        "siblings": [
+          "departments[1].members[3].id",
+          "departments[1].members[3].name",
+          "departments[1].members[3].gender",
+          "departments[1].members[3].age",
+          "departments[1].members[3].phone",
+          "departments[1].members[3].email",
+          "departments[1].members[3].id_card",
+          "departments[1].members[3].address",
+          "departments[1].members[3].province",
+          "departments[1].members[3].created_at"
+        ]
+      },
+      "departments[1].members[3].created_at": {
+        "depth": 3,
+        "parent": "departments[1].members[3]",
+        "siblings": [
+          "departments[1].members[3].id",
+          "departments[1].members[3].name",
+          "departments[1].members[3].gender",
+          "departments[1].members[3].age",
+          "departments[1].members[3].phone",
+          "departments[1].members[3].email",
+          "departments[1].members[3].id_card",
+          "departments[1].members[3].address",
+          "departments[1].members[3].province",
+          "departments[1].members[3].score"
+        ]
+      },
+      "table_name": {
+        "depth": 1,
+        "parent": null,
+        "siblings": [
+          "schema"
+        ]
+      },
+      "schema": {
+        "depth": 1,
+        "parent": null,
+        "siblings": [
+          "table_name"
+        ]
+      }
+    },
+    "pii_seeds": {
+      "departments[1].members[3].name": [
+        "high_conf",
+        "person_name"
+      ],
+      "departments[0].name": [
+        "high_conf",
+        "person_name"
+      ],
+      "departments[0].members[2].name": [
+        "high_conf",
+        "person_name"
+      ],
+      "departments[0].manager.name": [
+        "high_conf",
+        "person_name"
+      ],
+      "departments[0].members[1].name": [
+        "high_conf",
+        "person_name"
+      ],
+      "departments[0].members[0].name": [
+        "high_conf",
+        "person_name"
+      ],
+      "name": [
+        "high_conf",
+        "person_name"
+      ],
+      "departments[1].members[0].name": [
+        "high_conf",
+        "person_name"
+      ],
+      "departments[1].name": [
+        "high_conf",
+        "person_name"
+      ],
+      "departments[1].manager.name": [
+        "high_conf",
+        "person_name"
+      ],
+      "departments[1].members[2].name": [
+        "high_conf",
+        "person_name"
+      ],
+      "departments[0].members[3].name": [
+        "high_conf",
+        "person_name"
+      ],
+      "departments[1].members[1].name": [
+        "high_conf",
+        "person_name"
+      ],
+      "departments[1].members[0].phone": [
+        "high_conf",
+        "phone_number"
+      ],
+      "departments[0].manager.phone": [
+        "high_conf",
+        "phone_number"
+      ],
+      "departments[0].members[0].phone": [
+        "high_conf",
+        "phone_number"
+      ],
+      "departments[1].members[1].phone": [
+        "high_conf",
+        "phone_number"
+      ],
+      "phone": [
+        "high_conf",
+        "phone_number"
+      ],
+      "departments[0].members[1].phone": [
+        "high_conf",
+        "phone_number"
+      ],
+      "departments[1].members[3].phone": [
+        "high_conf",
+        "phone_number"
+      ],
+      "departments[1].members[2].phone": [
+        "high_conf",
+        "phone_number"
+      ],
+      "departments[1].manager.phone": [
+        "high_conf",
+        "phone_number"
+      ],
+      "departments[0].members[3].phone": [
+        "high_conf",
+        "phone_number"
+      ],
+      "departments[0].members[2].phone": [
+        "high_conf",
+        "phone_number"
+      ],
+      "departments[1].members[3].email": [
+        "high_conf",
+        "email"
+      ],
+      "email": [
+        "high_conf",
+        "email"
+      ],
+      "departments[0].members[1].email": [
+        "high_conf",
+        "email"
+      ],
+      "departments[1].manager.email": [
+        "high_conf",
+        "email"
+      ],
+      "departments[0].members[0].email": [
+        "high_conf",
+        "email"
+      ],
+      "departments[1].members[2].email": [
+        "high_conf",
+        "email"
+      ],
+      "departments[1].members[0].email": [
+        "high_conf",
+        "email"
+      ],
+      "departments[0].manager.email": [
+        "high_conf",
+        "email"
+      ],
+      "departments[0].members[3].email": [
+        "high_conf",
+        "email"
+      ],
+      "departments[0].members[2].email": [
+        "high_conf",
+        "email"
+      ],
+      "departments[1].members[1].email": [
+        "high_conf",
+        "email"
+      ],
+      "departments[1].manager.gender": [
+        "high_conf",
+        "gender"
+      ],
+      "departments[0].members[1].gender": [
+        "high_conf",
+        "gender"
+      ],
+      "gender": [
+        "high_conf",
+        "gender"
+      ],
+      "departments[0].members[2].gender": [
+        "high_conf",
+        "gender"
+      ],
+      "departments[0].members[3].gender": [
+        "high_conf",
+        "gender"
+      ],
+      "departments[1].members[1].gender": [
+        "high_conf",
+        "gender"
+      ],
+      "departments[1].members[2].gender": [
+        "high_conf",
+        "gender"
+      ],
+      "departments[1].members[0].gender": [
+        "high_conf",
+        "gender"
+      ],
+      "departments[1].members[3].gender": [
+        "high_conf",
+        "gender"
+      ],
+      "departments[0].members[0].gender": [
+        "high_conf",
+        "gender"
+      ],
+      "departments[0].manager.gender": [
+        "high_conf",
+        "gender"
+      ],
+      "departments[0].manager.id_card": [
+        "high_conf",
+        "id_card"
+      ],
+      "departments[0].members[1].id_card": [
+        "high_conf",
+        "id_card"
+      ],
+      "departments[0].members[2].id_card": [
+        "high_conf",
+        "id_card"
+      ],
+      "id_card": [
+        "high_conf",
+        "id_card"
+      ],
+      "departments[1].members[0].id_card": [
+        "high_conf",
+        "id_card"
+      ],
+      "departments[1].manager.id_card": [
+        "high_conf",
+        "id_card"
+      ],
+      "departments[1].members[2].id_card": [
+        "high_conf",
+        "id_card"
+      ],
+      "departments[1].members[3].id_card": [
+        "high_conf",
+        "id_card"
+      ],
+      "departments[1].members[1].id_card": [
+        "high_conf",
+        "id_card"
+      ],
+      "departments[0].members[3].id_card": [
+        "high_conf",
+        "id_card"
+      ],
+      "departments[0].members[0].id_card": [
+        "high_conf",
+        "id_card"
+      ],
+      "departments[1].members[2].address": [
+        "high_conf",
+        "address"
+      ],
+      "departments[1].manager.address": [
+        "high_conf",
+        "address"
+      ],
+      "departments[0].members[2].address": [
+        "high_conf",
+        "address"
+      ],
+      "departments[0].members[0].address": [
+        "high_conf",
+        "address"
+      ],
+      "departments[1].members[3].address": [
+        "high_conf",
+        "address"
+      ],
+      "departments[0].manager.address": [
+        "high_conf",
+        "address"
+      ],
+      "departments[1].members[0].address": [
+        "high_conf",
+        "address"
+      ],
+      "departments[1].members[1].address": [
+        "high_conf",
+        "address"
+      ],
+      "departments[0].members[3].address": [
+        "high_conf",
+        "address"
+      ],
+      "departments[0].members[1].address": [
+        "high_conf",
+        "address"
+      ],
+      "address": [
+        "high_conf",
+        "address"
+      ],
+      "schema": [
+        "needs_llm",
+        null
+      ]
+    },
+    "total_records_sampled": 210,
+    "elapsed_s": 0.0
+  },
+  "total_elapsed_s": 0.3
+}

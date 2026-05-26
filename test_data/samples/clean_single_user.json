@@ -1,0 +1,13 @@
+{
+  "id": 1,
+  "name": "黄美丽",
+  "gender": "男",
+  "age": 19,
+  "phone": "13872235392",
+  "email": "user7@example.com",
+  "id_card": "625530199006118912",
+  "address": "上海市浦东新区某某大厦A座",
+  "province": "上海",
+  "score": 87.07,
+  "created_at": "2024-09-03T18:27:00Z"
+}
