@@ -1,19 +1,20 @@
 """文件 I/O 工具: 读头、二进制检测、遍历. 全部流式, 不整文件 load."""
 
-import os
-import string
+from pathlib import Path
+from typing import Iterator, Union
+
 from src.constants import SNIFF_HEAD_BYTES, SQLITE_MAGIC, MAX_BINARY_RATIO
 
 
-def read_head_bytes(path: str, n: int = SNIFF_HEAD_BYTES) -> bytes:
+def read_head_bytes(path: Union[str, Path], n: int = SNIFF_HEAD_BYTES) -> bytes:
     """读文件头部 n 字节."""
-    with open(path, "rb") as f:
+    with Path(path).open("rb") as f:
         return f.read(n)
 
 
-def read_first_bytes(path: str, n: int) -> bytes:
+def read_first_bytes(path: Union[str, Path], n: int) -> bytes:
     """读文件前 n 字节 (通用)."""
-    with open(path, "rb") as f:
+    with Path(path).open("rb") as f:
         return f.read(n)
 
 
@@ -42,28 +43,29 @@ def is_sqlite_magic(raw16: bytes) -> bool:
     return raw16[: len(SQLITE_MAGIC)] == SQLITE_MAGIC
 
 
-def walk_files(root: str):
-    """遍历目录下所有文件, yield 绝对路径."""
-    for dirpath, _dirnames, filenames in os.walk(root):
-        for fn in filenames:
-            yield os.path.join(dirpath, fn)
+def walk_files(root: Union[str, Path]) -> Iterator[str]:
+    """遍历目录下所有文件, yield 绝对路径字符串."""
+    p = Path(root)
+    for fpath in p.rglob("*"):
+        if fpath.is_file():
+            yield str(fpath.resolve())
 
 
-def count_lines(path: str, encoding: str) -> int:
+def count_lines(path: Union[str, Path], encoding: str) -> int:
     """流式统计文本文件行数."""
     count = 0
-    with open(path, "r", encoding=encoding, errors="replace") as f:
+    with Path(path).open("r", encoding=encoding, errors="replace") as f:
         for _ in f:
             count += 1
     return count
 
 
-def file_size(path: str) -> int:
+def file_size(path: Union[str, Path]) -> int:
     """文件字节数."""
-    return os.path.getsize(path)
+    return Path(path).stat().st_size
 
 
-def extension(path: str) -> str:
+def extension(path: Union[str, Path]) -> str:
     """返回小写扩展名, 不含点, 无扩展名返回空串."""
-    ext = os.path.splitext(path)[1].lower()
-    return ext.lstrip(".") if ext else ""
+    suffix = Path(path).suffix.lower()
+    return suffix.lstrip(".") if suffix else ""

@@ -1,8 +1,8 @@
 """日志模块: 统一使用 Python logging 库."""
 
 import logging
-import os
 import sys
+from pathlib import Path
 
 
 def setup_logger(
@@ -41,9 +41,7 @@ def setup_logger(
         logger.addHandler(handler)
 
     if file:
-        _dir = os.path.dirname(file)
-        if _dir:
-            os.makedirs(_dir, exist_ok=True)
+        Path(file).parent.mkdir(parents=True, exist_ok=True)
         file_handler = logging.FileHandler(file, encoding="utf-8")
         file_handler.setFormatter(fmt)
         logger.addHandler(file_handler)

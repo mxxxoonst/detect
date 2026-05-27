@@ -1,4 +1,3 @@
-import os
 import json
 import csv
 import logging
@@ -77,7 +76,7 @@ class JsonParser(BaseParser):
         return result
     def _save_discovery_report(self, stats: dict,total:int):
         """保存字段分析报告"""
-        report_path = Path(os.path.join(self.output_dir, f"{os.path.basename(self.file_path)}_report.txt"))
+        report_path = self.output_dir / f"{Path(self.file_path).name}_report.txt"
         logger.info(f"\n[+] 发现阶段完成。共处理 {total} 个对象。")
         logger.info(f"[+] 共发现 {len(stats)} 个唯一的扁平化key。")
 
@@ -141,8 +140,7 @@ class JsonParser(BaseParser):
 
     def process(self):
         #创建基准目录
-        if not os.path.exists(self.output_dir):
-            os.makedirs(self.output_dir)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         # 1. 创建输出目录
         # project_name=self.file_path.parent.name
         # file_name=self.file_path.stem
@@ -159,13 +157,12 @@ class JsonParser(BaseParser):
         
         self.mapping_rules = self.llm_engine.generate_mapping(schema_stats)
         # 保存映射规则以备查
-        rule_path = Path(os.path.join(self.output_dir, "mapping_rules.json"))
-        with open(rule_path, 'w', encoding='utf-8') as f:
-            json.dump(self.mapping_rules, f, ensure_ascii=False, indent=2)
+        rule_path = self.output_dir / "mapping_rules.json"
+        rule_path.write_text(json.dumps(self.mapping_rules, ensure_ascii=False, indent=2), encoding='utf-8')
 
         # 4. ETL 执行阶段
         logger.info("启动阶段三: ETL 转换与输出")
-        output_csv = Path(os.path.join(self.output_dir, f"{self.file_path.stem}_parsed.csv"))
+        output_csv = self.output_dir / f"{Path(self.file_path).stem}_parsed.csv"
         
         # 获取 CSV 表头 
         headers =["id_card","user_name","phone","gender","address","url_and_addresses","birthday","age",

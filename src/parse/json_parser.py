@@ -3,6 +3,7 @@
 import ijson
 import json
 import json5
+from pathlib import Path
 
 from src.parse.grade import Grade
 from src.utils.encoding import safe_decode
@@ -11,32 +12,95 @@ from src.constants import SNIFF_HEAD_BYTES
 
 
 def parse_json(path: str, encoding: str) -> Grade:
-    """流式严格解析 JSON, 失败回退 json5 容错."""
+    """两级 ijson 流式策略解析 JSON 数组，兜底 json5 处理非数组/语法噪声。
+
+    Level 1: ijson.items 流式读完所有元素，无崩溃 → tier1, I=1.0
+    Level 2: ijson 中途崩溃但已读出部分元素 → 按行数比例估算 I(x)
+    兜底:    good==0（非数组 / 首条即损坏）→ json5 容错
+    """
     raw = read_head_bytes(path)
     text = safe_decode(raw, encoding)
 
-    # strict parse via ijson (streaming)
+    good, crashed, bytes_good = _ijson_count_items(path)
+
+    if good > 0:
+        if not crashed:
+            # ── Level 1: 全量解析成功 ──────────────────────────────
+            return Grade(
+                tier=1, I=1.0, fmt="json", encoding=encoding,
+                parsed={"type": "json", "path": path, "encoding": encoding},
+                note=f"ijson strict OK, {good} items",
+            )
+
+        # ── Level 2: 崩溃前读出了部分记录 ──────────────────────────
+        # estimated_total = 文件总行数 / (good_items 占的行数 / good_items)
+        #                 = 文件总行数 × good_items / lines_consumed
+        file_size = Path(path).stat().st_size
+        total_lines = count_lines(path, encoding)
+
+        # 用字节比例近似 good_items 占的行数
+        # 注意: ijson 有读取缓冲，bytes_good 可能接近 file_size（末尾截断场景）
+        # 因此 estimated_total 下界取 good+1：崩溃说明至少还有 1 条损坏记录
+        lines_consumed = max(1, round(total_lines * bytes_good / max(file_size, 1)))
+        avg_lines_per_item = lines_consumed / good
+        estimated_total = max(good + 1, round(total_lines / avg_lines_per_item))
+        I = min(good / estimated_total, 1.0)
+        tier = 1 if I >= 0.99 else 2
+
+        return Grade(
+            tier=tier, I=I, fmt="json", encoding=encoding,
+            parsed={
+                "type": "json", "path": path, "encoding": encoding,
+                "good_items": good, "estimated_total": estimated_total,
+            },
+            n_form="partial_array",
+            note=f"ijson partial: {good}/{estimated_total} items, I={I:.3f}",
+        )
+
+    # ── 兜底: good==0，顶层非数组或首条即损坏 → json5 容错 ────────
+    return _json_tolerant(path, encoding, text, "no items from ijson streaming")
+
+
+def _ijson_count_items(path: str) -> tuple:
+    """用 ijson.items 流式读顶层数组，统计成功元素数和崩溃前消耗字节。
+
+    Returns:
+        (good_count, crashed, bytes_at_last_good_item)
+        - good_count: 成功 yield 的元素数
+        - crashed:    True 表示 ijson 中途抛异常
+        - bytes_at_last_good_item: 最后一个成功元素 yield 后已读字节数
+          （用于按比例估算 good_items 在文件中占的行数）
+    """
+    class _PosTracker:
+        """透传 read()，同时累计已读字节数，供 ijson 消费。"""
+        def __init__(self, f):
+            self._f = f
+            self.pos = 0
+
+        def read(self, n=-1):
+            data = self._f.read(n)
+            self.pos += len(data)
+            return data
+
+    good = 0
+    last_good_pos = 0
+
     try:
-        # ijson 需要 bytes 输入做流式解析
-        records = []
         with open(path, "rb") as f:
-            parser = ijson.parse(f)
-            for _prefix, _event, value in parser:
-                # 仅收集顶层对象/数组元素做计数
-                pass
-        # ijson 跑通 = strict OK
-        # 重新读文件统计 record 数
-        total_units = _estimate_json_units(path, encoding, text)
-        return Grade(tier=1, I=1.0, fmt="json", encoding=encoding,
-                     parsed={"type": "json", "path": path, "encoding": encoding},
-                     note=f"strict parse OK, ~{total_units} units")
-    except Exception as e:
-        # tolerant fallback with json5
-        return _json_tolerant(path, encoding, text, str(e))
+            tracker = _PosTracker(f)
+            try:
+                for _item in ijson.items(tracker, "item"):
+                    good += 1
+                    last_good_pos = tracker.pos
+                return good, False, last_good_pos   # 无崩溃
+            except Exception:
+                return good, True, last_good_pos    # 崩溃前的计数
+    except OSError:
+        return 0, True, 0
 
 
 def parse_jsonl(path: str, encoding: str) -> Grade:
-    """解析 JSONL: 每行一个 JSON 对象."""
+    """解析 JSONL: 每行一个 JSON 对象。"""
     try:
         good = 0
         bad = 0
@@ -66,24 +130,42 @@ def parse_jsonl(path: str, encoding: str) -> Grade:
 
 
 def _json_tolerant(path: str, encoding: str, text: str, strict_error: str) -> Grade:
-    """json5 容错解析."""
+    """json5 容错解析，用于顶层非数组或 json5 语法噪声的文件。
+
+    I(x) 修正:
+      - head 覆盖整个文件 (小文件) → json5 已恢复全部内容 → I = 1.0
+      - head 仅覆盖部分 (大文件) → 按平均对象字节数外推 estimated_total
+    """
     try:
         data = json5.loads(text)
-        total_lines = count_lines(path, encoding)
-        total_units = max(total_lines // 2, 1)
-        # 成功恢复, 计算 I(x)
+
         if isinstance(data, list):
             recovered = len(data)
         elif isinstance(data, dict):
             recovered = 1
         else:
             recovered = 0
-        I = min(recovered / total_units, 1.0) if total_units > 0 else 0.0
+
+        # head 与整个文件的覆盖比较
+        fsize = Path(path).stat().st_size
+        head_bytes = len(text.encode("utf-8", errors="replace"))
+
+        if head_bytes >= fsize * 0.99:
+            # head 就是完整文件，json5 已恢复所有内容
+            I = 1.0 if recovered > 0 else 0.0
+        else:
+            # 大文件：按已读部分的平均对象大小推算总量
+            avg_obj_bytes = max(head_bytes / max(recovered, 1), 1)
+            total_units = max(recovered, int(fsize / avg_obj_bytes))
+            I = min(recovered / total_units, 1.0)
+
         tier = 1 if I >= 0.99 else 2
-        return Grade(tier=tier, I=I, fmt="json", encoding=encoding,
-                     parsed={"type": "json", "tolerant": True, "units": recovered},
-                     n_form=_classify_json_error(strict_error),
-                     note=f"json5 tolerant recovery, I={I:.3f}")
+        return Grade(
+            tier=tier, I=I, fmt="json", encoding=encoding,
+            parsed={"type": "json", "tolerant": True, "units": recovered},
+            n_form=_classify_json_error(strict_error),
+            note=f"json5 tolerant recovery, I={I:.3f}",
+        )
     except Exception as e2:
         return Grade(tier=3, I=0.0, fmt="json", encoding=encoding,
                      error=f"strict: {strict_error}; tolerant: {e2}")
@@ -103,18 +185,3 @@ def _classify_json_error(error_msg: str) -> str:
     if "expecting" in msg:
         return "incomplete"
     return "other"
-
-
-def _estimate_json_units(path: str, encoding: str, head_text: str) -> int:
-    """估算 JSON 文件中的结构单元数.
-
-    方法 A: 按文件大小线性估算.
-    如果 JSON 顶层是数组, 估算元素数; 否则按 1 个单元计.
-    """
-    stripped = head_text.strip()
-    if stripped.startswith("["):
-        # 数组: 按文件大小/平均元素大小估算
-        file_size = __import__("os").path.getsize(path)
-        avg_item_size = max(len(stripped) // 10, 1)
-        return max(file_size // avg_item_size, 1)
-    return 1

@@ -22,7 +22,7 @@
 
 ```
 D:\PII_detect\
-├── main.py                       # CLI 入口 (argparse 子命令)
+├── main.py                       # CLI 入口 (argparse 子命令) + resolve_input() 容错路径解析
 ├── pyproject.toml                # uv 包管理 + 依赖声明
 ├── src/
 │   ├── __init__.py
@@ -31,7 +31,7 @@ D:\PII_detect\
 │   │   ├── __init__.py
 │   │   ├── sniffer.py            # sniff_file(path) → (fmt, enc, conf)
 │   │   ├── voting.py             # vote_format(lines, text) → {fmt: score}
-│   │   └── profiler.py           # profile_corpus(root) → 交叉表
+│   │   └── profiler.py           # profile_corpus(root, files=None) → 交叉表
 │   ├── parse/                    # [阶段1] 容错分级解析
 │   │   ├── __init__.py
 │   │   ├── grade.py              # Grade dataclass + grade_parse() 路由
@@ -48,10 +48,15 @@ D:\PII_detect\
 │   │   ├── topology.py           # 信息四: 拓扑 (depth, parent, siblings)
 │   │   └── pii_seed.py           # 信息五: PII 种子 (key 名推断 + free_text 标记)
 │   └── utils/
-│       ├── __init__.py
+│       ├── logger.py             # 日志模块: setup_logger(), get_logger()
 │       ├── encoding.py           # chardet 探编码 + safe_decode
 │       ├── file_utils.py         # is_binary(), 读头, walk_files
 │       └── text_utils.py         # 括号平衡, 列稳定性, 非空行, JSON 试探
+├── parsers/                      # [独立] LLM 驱动的解析器系统 (Gateway 模式)
+│   ├── txt_parser.py             # 网关: 格式检测 → 路由到 json/csv/sql 解析器
+│   ├── json_parser.py            # 流式 JSON 解析 + Schema 发现 (采样 5K/50K)
+│   ├── csv_parser.py             # Pandas CSV 解析 + NUL 字节清洗
+│   └── sql_parser.py             # SQL 拆解: INSERT 语句 → Raw CSV → 委托 CsvParser
 ├── tests/
 │   ├── conftest.py               # pytest fixtures (samples_dir, make_temp_file)
 │   ├── test_sniff/               # 阶段0 测试 (14 用例)
@@ -60,12 +65,14 @@ D:\PII_detect\
 ├── test_data/
 │   ├── generate.py               # 测试数据生成器 (~27 文件)
 │   └── samples/                  # 生成的测试样本
-└── output/                       # 流水线运行结果输出
+├── output/                       # 流水线运行结果输出 (gitignored)
+├── quick_start.md                # 快速上手指南
+└── CLAUDE.md                     # 本文档
 ```
 
 ## 架构设计
 
-### 数据流：三阶段流水线
+### 核心数据流：三阶段流水线 (src/)
 
 ```
 corpus_root/  →  [阶段0] sniff_all  →  [阶段1] grade_parse  →  [阶段2] extract
@@ -92,6 +99,7 @@ corpus_root/  →  [阶段0] sniff_all  →  [阶段1] grade_parse  →  [阶段
   - Free text: 长句 + 标点 + 无强结构 (0.5)
 - **置信度阈值**: 分数 < 0.5 → 归类为 `free_text`
 - **关键常量**: `SNIFF_HEAD_BYTES=65536`, `SNIFF_LINES=20`, `SQLITE_MAGIC=b"SQLite format 3\x00"`
+- **profiler 更新**: `profile_corpus(root, files=None)` — 可选 `files` 参数接收预收集的文件列表，与 CLI 的 `resolve_input()` 协作避免重复遍历
 
 #### 阶段1：容错分级解析 (parse/)
 
@@ -148,9 +156,77 @@ corpus_root/  →  [阶段0] sniff_all  →  [阶段1] grade_parse  →  [阶段
 
 - **A/B 比值**: `naming_templates_A / shape_templates_B` — 命名多样性 vs 结构多样性
 
+### 独立解析器系统 (parsers/) — Gateway 模式
+
+`parsers/` 是一个**独立于核心流水线**的解析器系统，使用 Gateway 模式实现对未知格式 TXT 文件的自动路由和处理。依赖外部框架: `core.base.BaseParser`, `core.llm_engine.LLMMappingEngine`, `core.format_detector.FormatDetector`。
+
+#### 入口: TxtParser (网关)
+
+`parsers/txt_parser.py` — `TxtParser.process()`:
+
+1. 使用 `FormatDetector` 探测文件真实格式 → `(fmt_type, meta)`
+2. 动态路由:
+   - `"json"` → 实例化 `JsonParser`, 委托 `process()`
+   - `"csv"` → 实例化 `CsvParser`, 传入探测到的分隔符 `meta.get("delimiter")`, 委托 `process()`
+   - `"sql"` → 实例化 `SqlParser`, 委托 `process()`
+3. `detect()` 方法: Schema 字段探查模式, 同样路由但调用各 parser 的 `detect()` 方法
+
+#### JsonParser (JSON 解析)
+
+`parsers/json_parser.py` — `JsonParser.process()`:
+
+1. **Schema 发现** (`_discovery_phase`): 使用 `stream_read_json()` 流式读取, 对前 5000 条 record 用 `flatten_json()` 展开嵌套 key, 统计每个 key 的出现次数和示例值
+2. **LLM 映射**: 调用 `LLMMappingEngine.generate_mapping()` 生成字段映射规则
+3. **ETL 转换**: 重新全量读文件, 按映射规则逐行转换, 输出标准化 CSV
+4. **Schema 探查** (`detect` / `_schema_detect`): 采样前 50000 条, 输出字段名列表 + 前 10 条样本值到探测文件
+
+#### CsvParser (CSV 解析)
+
+`parsers/csv_parser.py` — `CsvParser.process()`:
+
+1. **安全读取** (`_read_csv_safe`): 使用 Pandas `read_csv`, `on_bad_lines='skip'`
+2. **NUL 字节清洗** (`_read_cleaned_data`): 当 CSV 解析器报 NUL 字节错误时, 将文件读到内存 `replace('\0', '')` 后重新解析
+3. **LLM 语义映射**: 调用 `LLMMappingEngine.generate_csv_header_mapping()` 做字段映射
+4. **ETL 转换** (`_transform_and_save`): 支持单列直接映射 (int index) 和多列组合映射 (list of indices)
+5. **Schema 探查** (`detect` / `_save_discovery_report`): 读前 10 行, 输出字段名 + 样本值到探测文件
+
+#### SqlParser (SQL 拆解)
+
+`parsers/sql_parser.py` — `SqlParser.process()`:
+
+1. **SQL 拆解** (阶段1): 流式读 SQL 文件, 用 regex 识别 `CREATE TABLE` (提取列名) 和 `INSERT INTO` (解析 VALUES 元组), 按表名分写入 `raw_extracted_sql/{project}/{table}.csv`
+2. **Record 解析** (`_parse_values_part`): 用 `csv.reader` 解析 SQL VALUES 中的元组, 处理嵌套括号/引号
+3. **委托 CsvParser** (阶段2): 遍历生成的原始 CSV, 逐个交给 `CsvParser.process()` 做标准化清洗
+4. **Schema 探查** (`detect`): 同样拆解 SQL → Raw CSV, 但调用 `CsvParser._save_discovery_report()` 输出字段发现报告
+
+### 日志系统
+
+`src/utils/logger.py` — Python 标准库 `logging` 封装:
+
+```python
+def setup_logger(name="pii_detect", level=INFO, stream=True, file=None) -> Logger
+```
+
+- 创建 logger, 支持同时输出到 `sys.stdout` 和可选的 UTF-8 日志文件
+- 格式: `"HH:MM:SS [LEVEL] message"`
+- 避免重复添加 handler (幂等)
+- 模块级 `logger` 单例: 子模块可直接 `from src.utils.logger import logger` 使用
+- `get_logger(name)`: 创建 `pii_detect.{name}` 命名子 logger
+
+### CLI 输入容错机制
+
+`main.py:resolve_input(root, log)` — 宽限输入解析:
+
+1. **单文件**: 直接返回 `[path]`
+2. **目录**: 递归遍历所有文件, 有则返回
+3. **空目录回溯**: 向上遍历父目录, 重复尝试直到找到文件或到达文件系统根
+4. **全程无文件**: 返回空列表, 记录 error 日志
+
+所有四个 CLI 命令 (`sniff`, `parse`, `extract`, `pipeline`) 均在启动时调用 `resolve_input()`, 路径为空时终止。
+
 ## PII 检测关键词
 
-中英双语覆盖 (`src/constants.py:9-18`):
+中英双语覆盖 (`src/constants.py`):
 
 ```
 name, phone, email, mail, id_card, idcard, ssn, social.security,
@@ -164,7 +240,7 @@ ip_addr, mac, imei, uuid, token, secret, password, passwd, pwd
 
 ## 二进制检测逻辑
 
-`is_binary(raw)` (`src/utils/file_utils.py:20-35`):
+`is_binary(raw)` (`src/utils/file_utils.py`):
 
 - NULL 字节 > 1/256 比例 → 强二进制信号
 - 控制字符 (0x00-0x08, 0x0B-0x0C, 0x0E-0x1F, 0x7F) 占比 > 30% → 二进制
@@ -176,15 +252,20 @@ ip_addr, mac, imei, uuid, token, secret, password, passwd, pwd
 # 生成测试数据
 uv run python test_data/generate.py [--output test_data/samples] [--seed 42]
 
-# 独立子命令
-uv run python main.py sniff   <corpus_root> [-o output]    # 仅阶段0
-uv run python main.py parse   <corpus_root> [-o output]    # 阶段0+1
-uv run python main.py extract <corpus_root> [-o output]    # 阶段0+1+2 (仅tier1)
-uv run python main.py pipeline <corpus_root> [-o output]   # 完整三阶段
+# 独立子命令 (支持文件/目录作为输入)
+uv run python main.py sniff   <corpus_root> -o output -f output/sniff.log
+uv run python main.py parse   <corpus_root> -o output -f output/parse.log
+uv run python main.py extract <corpus_root> -o output -f output/extract.log
+uv run python main.py pipeline <corpus_root> -o output -f output/pipeline.log
 
 # 测试
 uv run python -m pytest tests/ -v
 ```
+
+CLI 标志:
+- `root`: 语料库根目录或单个文件路径
+- `-o, --output-dir`: JSON 报告输出目录 (默认: `output`)
+- `-f, --output-file`: 日志文件路径 (默认: `<output-dir>/<command>.log`)
 
 ## 已知问题与边界
 
@@ -192,3 +273,4 @@ uv run python -m pytest tests/ -v
 2. **短 GBK 文件**: chardet 可能将 GBK 误判为 `cp1250`/`windows-1250`（代码页邻接），需在真实数据上验证
 3. **非 .sql 扩展名的 SQL 文件**: 如果 INSERT 语句中逗号分隔值与 CSV 模式竞争，SQL (0.7) 可能输给 CSV (0.9)，需要观察真实分布后再调权重
 4. **随机字节文件** (`os.urandom`) 可能因巧合不触发二进制检测被误判为 TSV；真实二进制文件 (exe/png) 含 NULL 字节不会误判
+5. **`parsers/` 依赖外框架**: `core.base`, `core.llm_engine`, `core.format_detector` 不在当前仓库中, 直接 import 会失败; 该目录为独立系统, 与 `src/` 流水线无调用关系

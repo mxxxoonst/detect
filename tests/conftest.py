@@ -1,18 +1,18 @@
 """pytest fixtures: 指向 test_data/samples/ 目录."""
 
-import os
 import sys
+from pathlib import Path
+
 import pytest
 
 # 确保 src 可导入
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 
 @pytest.fixture
 def samples_dir():
     """测试数据样本目录."""
-    path = os.path.join(os.path.dirname(__file__), "..", "test_data", "samples")
-    return os.path.abspath(path)
+    return str(Path(__file__).resolve().parent.parent / "test_data" / "samples")
 
 
 @pytest.fixture

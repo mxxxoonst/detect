@@ -1,5 +1,4 @@
 import json
-import os
 import re
 import csv
 import logging
@@ -16,7 +15,7 @@ class SqlParser(BaseParser):
         
         # 定义中间产物（原始CSV）的存放路径
         #拆解表存放路径 outputdir/raw_extracted_sql/
-        self.raw_output_dir = Path(os.path.join(self.output_dir, "raw_extracted_sql"))
+        self.raw_output_dir = self.output_dir / "raw_extracted_sql"
         self.detect_path=Path(config['paths'].get('Detect_path',' '))
         # 缓存与状态
         self.schemas = {}
@@ -53,18 +52,16 @@ class SqlParser(BaseParser):
                 logger.info(f"表 {table_name} 句柄已关闭，正在重新打开(追加模式)...")
 
         # 2. 准备基准路径
-        if not os.path.exists(self.raw_output_dir):
-            os.makedirs(self.raw_output_dir)
+        self.raw_output_dir.mkdir(parents=True, exist_ok=True)
         #为每一个拆解后的table文件创建一个目录
-        project_name=self.file_path.parent.name
-        output_dir=self.raw_output_dir / project_name
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)    
+        project_name = Path(self.file_path).parent.name
+        output_dir = self.raw_output_dir / project_name
+        output_dir.mkdir(parents=True, exist_ok=True)
         csv_path = output_dir / f"{table_name}.csv"
-        
+
         # 3. 决定模式 (w:新建, a:追加)
         mode = 'w'
-        if os.path.exists(csv_path):
+        if csv_path.exists():
             mode = 'a'
         
         try:
@@ -83,7 +80,7 @@ class SqlParser(BaseParser):
             if mode == 'w' and headers:
                 writer.writerow(headers)
                 has_header = True
-            elif mode == 'a' and os.path.getsize(csv_path) == 0 and headers:
+            elif mode == 'a' and csv_path.stat().st_size == 0 and headers:
                 writer.writerow(headers)
                 has_header = True
             
@@ -255,7 +252,7 @@ class SqlParser(BaseParser):
                     worker = CsvParser(raw_csv_path, self.output_dir, self.config)
                     worker.process()
                 except Exception as e:
-                    logger.error(f"子任务失败 ({os.path.basename(raw_csv_path)}): {e}")
+                    logger.error(f"子任务失败 ({Path(raw_csv_path).name}): {e}")
             
             logger.info("所有子 CSV 处理完成。")
 
@@ -366,6 +363,6 @@ class SqlParser(BaseParser):
                         f.write(json_str+'\n')
                     logger.info(f" SQL字段 探查结束: {self.file_path}")
                 except Exception as e:
-                    logger.error(f"子任务失败 ({os.path.basename(raw_csv_path)}): {e}")
+                    logger.error(f"子任务失败 ({Path(raw_csv_path).name}): {e}")
             
             logger.info("所有子 CSV 处理完成。")

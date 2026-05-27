@@ -1,5 +1,4 @@
 import json
-import os
 import logging
 from pathlib import Path
 import pandas as pd
@@ -127,8 +126,7 @@ class CsvParser(BaseParser):
             df_output = df_output.fillna(" ")
             
             # 确保目录存在
-            if not os.path.exists(self.output_dir):
-                os.makedirs(self.output_dir)
+            self.output_dir.mkdir(parents=True, exist_ok=True)
             
             #为每一个文件创建一个目录
             #project_name=self.file_path.parent.name

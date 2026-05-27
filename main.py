@@ -9,9 +9,9 @@
 
 import argparse
 import json
-import os
 import sys
 import time
+from pathlib import Path
 
 from src.sniff.profiler import profile_corpus
 from src.sniff.sniffer import sniff_file
@@ -52,28 +52,28 @@ def resolve_input(root: str, log) -> list:
     Returns:
         找到的文件路径列表
     """
-    root = os.path.abspath(root)
+    p = Path(root).resolve()
 
     # 单文件: 直接返回
-    if os.path.isfile(root):
-        log.debug("输入为单文件: %s", root)
-        return [root]
+    if p.is_file():
+        log.debug("输入为单文件: %s", p)
+        return [str(p)]
 
-    if not os.path.isdir(root):
-        log.error("输入路径不存在: %s", root)
+    if not p.is_dir():
+        log.error("输入路径不存在: %s", p)
         return []
 
     # 目录: 递归查找所有文件
-    files = list(walk_files(root))
+    files = list(walk_files(p))
     if files:
-        log.debug("目录 %s 下找到 %d 个文件", root, len(files))
+        log.debug("目录 %s 下找到 %d 个文件", p, len(files))
         return files
 
     # 目录为空: 向上查找父目录, 直到文件系统根
-    log.warning("目录 %s 下无文件, 向上查找父目录 ...", root)
-    current = root
-    while current != os.path.dirname(current):  # 未到文件系统根
-        parent = os.path.dirname(current)
+    log.warning("目录 %s 下无文件, 向上查找父目录 ...", p)
+    current = p
+    while current != current.parent:  # 未到文件系统根
+        parent = current.parent
         parent_files = list(walk_files(parent))
         if parent_files:
             log.info("在父目录 %s 中找到 %d 个文件", parent, len(parent_files))
@@ -284,10 +284,10 @@ def _print_extract_report(result: dict):
 
 def _save_output(data, filename: str, output_dir: str):
     """保存 JSON 结果到文件."""
-    os.makedirs(output_dir, exist_ok=True)
-    path = os.path.join(output_dir, filename)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2, default=str)
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    path = out / filename
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     print(f"  输出: {path}")
 
 
@@ -344,7 +344,7 @@ def main():
 
     # 默认日志文件: 未显式指定时使用 <output-dir>/<command>.log
     if args.command and args.output_file is None:
-        args.output_file = os.path.join(args.output_dir, f"{args.command}.log")
+        args.output_file = str(Path(args.output_dir) / f"{args.command}.log")
 
     if args.command == "sniff":
         cmd_sniff(args)
