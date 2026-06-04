@@ -3,7 +3,6 @@
 import re
 
 from src.parse.grade import Grade
-from src.constants import SQL_KEYWORD_PATTERN
 
 
 CREATE_INSERT_RE = re.compile(

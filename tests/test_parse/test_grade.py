@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from src.parse.grade import grade_parse, Grade
+from src.parse.grade import grade_parse
 
 
 def _p(samples_dir: str, name: str) -> str:

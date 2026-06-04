@@ -16,7 +16,7 @@ from typing import Any, Dict, List
 DIGIT_RE = re.compile(r"\d")
 ALPHA_RE = re.compile(r"[a-zA-Z]")
 CJK_RE = re.compile(r"[一-鿿㐀-䶿]")
-PUNCT_RE = re.compile(r"[，。！？、；：""''《》（）—…,.!?;:'\"()_/@#$%^&*+=<>{}|\\~`-]")
+PUNCT_RE = re.compile(r"[，。！？、；：""'《》（）—…,.!?;:\"()_/@#$%^&*+=<>{}|`-]")
 SPACE_RE = re.compile(r"\s")
 
 

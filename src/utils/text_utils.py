@@ -55,7 +55,6 @@ def column_stability(lines: List[str], sep: str) -> tuple:
     col_counts = [line.count(sep) + 1 for line in lines]
     if not col_counts:
         return 0, 0.0, []
-    avg = sum(col_counts) / len(col_counts)
     sd = stdev(col_counts) if len(col_counts) > 1 else 0.0
     return col_counts[0], sd, col_counts
 

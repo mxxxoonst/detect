@@ -1,0 +1,12 @@
+{
+  "users": [
+    {"id": 1, "name": "Alice", "phone": "13812345678", "email": "alice@example.com"},
+    {"id": 2, "name": "Bob",   "phone": "13987654321", "email": "bob@example.com"},
+    {"id": 3, "name": "Carol", "phone": "13700000001", "email": "carol@example.com"}
+  ],
+  "orders": [
+    {"order_id": "OD001", "amount": 99.9,  "status": "paid"},
+    {"order_id": "OD002", "amount": 199.0, "status": "pending"},
+    {"order_id": "OD003", "amount": 49.5,  "status": "shipped"}
+  ]
+}

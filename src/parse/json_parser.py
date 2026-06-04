@@ -8,7 +8,6 @@ from pathlib import Path
 from src.parse.grade import Grade
 from src.utils.encoding import safe_decode
 from src.utils.file_utils import count_lines, read_head_bytes
-from src.constants import SNIFF_HEAD_BYTES
 
 
 def parse_json(path: str, encoding: str) -> Grade:

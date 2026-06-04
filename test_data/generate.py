@@ -278,7 +278,7 @@ def gen_log_files(out: Path):
         msgs = [
             f"Request processed from 192.168.1.{random.randint(1,255)}",
             f"用户 {random.choice(CN_NAMES)} 登录成功",
-            f"Database connection timeout after 30s",
+            "Database connection timeout after 30s",
             f"File upload completed: report_{random.randint(1,99)}.pdf",
             f"权限检查失败: user_id={random.randint(1000,9999)}",
             f"Cache miss for key: session:{random.randint(10000,99999)}",

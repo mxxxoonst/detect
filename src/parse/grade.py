@@ -1,7 +1,7 @@
 """容错分级解析: Grade 数据类 + 路由分发."""
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Any, Optional
 
 
 @dataclass

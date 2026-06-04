@@ -9,14 +9,13 @@
 
 import argparse
 import json
-import sys
 import time
 from pathlib import Path
 
 from src.sniff.profiler import profile_corpus
 from src.sniff.sniffer import sniff_file
 from src.parse.grade import grade_parse
-from src.extract.extractor import extract_five_infos
+from src.extract.extractor import extract_all
 from src.utils.file_utils import walk_files
 from src.utils.logger import setup_logger
 
@@ -163,12 +162,20 @@ def cmd_extract(args):
             tier1_grades.append(grade)
 
     log.info("  tier1 种子数: %d", len(tier1_grades))
-    result = extract_five_infos(tier1_grades)
+    field_mode = getattr(args, "field_mode", "template")
+    log.info("  字段主干方案: %s", field_mode)
+    schema_units, vocab_table, global_view = extract_all(tier1_grades, mode=field_mode)
     elapsed = time.time() - start
-    result["elapsed_s"] = round(elapsed, 1)
+    global_view["elapsed_s"] = round(elapsed, 1)
 
-    _print_extract_report(result)
-    _save_output(result, "extract_report.json", args.output_dir)
+    _print_extract_report(global_view)
+    _save_output(global_view, "extract_report.json", args.output_dir)
+    _save_output(schema_units, "schema_units.json", args.output_dir)
+    _save_output(
+        {"vocab_table": vocab_table, "uncertain": global_view.get("uncertain_vocab", [])},
+        "vocab_table.json",
+        args.output_dir,
+    )
 
 
 def cmd_pipeline(args):
@@ -218,9 +225,12 @@ def cmd_pipeline(args):
     print("\n── 阶段2: 五类信息提取 ──")
     t2 = time.time()
     if tier1_grades:
-        extract_result = extract_five_infos(tier1_grades)
+        field_mode = getattr(args, "field_mode", "template")
+        log.info("  字段主干方案: %s", field_mode)
+        schema_units, vocab_table, extract_result = extract_all(tier1_grades, mode=field_mode)
         _print_extract_report(extract_result)
     else:
+        schema_units, vocab_table = [], {}
         extract_result = {"note": "无 tier1 种子, 跳过提取"}
         log.warning("无 tier1 种子可提取")
     extract_result["elapsed_s"] = round(time.time() - t2, 1)
@@ -239,9 +249,20 @@ def cmd_pipeline(args):
             "noise_count": len(noise),
             "free_text_count": len(free_text_grades),
         },
-        "phase2": extract_result,
+        "phase2": {
+            "global_view": extract_result,
+            "schema_unit_count": len(schema_units),
+            "vocab_class_count": len(vocab_table),
+        },
         "total_elapsed_s": round(total_elapsed, 1),
     }
+
+    _save_output(schema_units, "schema_units.json", args.output_dir)
+    _save_output(
+        {"vocab_table": vocab_table, "uncertain": extract_result.get("uncertain_vocab", [])},
+        "vocab_table.json",
+        args.output_dir,
+    )
 
     _save_output(pipeline_result, "pipeline_report.json", args.output_dir)
     log.info("全流水线完成, 总耗时: %.1fs", total_elapsed)
@@ -255,7 +276,7 @@ def cmd_pipeline(args):
 def _print_sniff_report(result: dict, elapsed: float):
     fmt_dist = result["format_dist"]
     print(f"  文件总数: {result['total_files']}")
-    print(f"  格式分布:")
+    print("  格式分布:")
     for fmt, cnt in sorted(fmt_dist.items(), key=lambda x: -x[1]):
         pct = cnt / max(result["total_files"], 1) * 100
         print(f"    {fmt:20s}: {cnt:5d}  ({pct:5.1f}%)")
@@ -278,7 +299,10 @@ def _print_extract_report(result: dict):
     print(f"  形状模板数 (B):      {result.get('shape_templates_B', 0)}")
     print(f"  命名模板数 (A):      {result.get('naming_templates_A', 0)}")
     print(f"  A/B 比值:            {result.get('AB_ratio', 0)}")
-    print(f"  PII 种子:            {len(result.get('pii_seeds', {}))}")
+    print(f"  PII 种子字段数:      {result.get('pii_seeds_count', 0)}")
+    print(f"  不确定词汇对:        {len(result.get('uncertain_vocab', []))}")
+    if result.get("partition_stats"):
+        print(f"  分片数:              {sum(s.get('partition_count', 0) for s in result['partition_stats'])}")
     print(f"  耗时: {result.get('elapsed_s', 0)}s")
 
 
@@ -333,12 +357,16 @@ def main():
     p_extract.add_argument("root", help="语料库根目录/文件")
     p_extract.add_argument("-o", "--output-dir", default="output", help="输出目录 (默认: output)")
     p_extract.add_argument("-f", "--output-file", default=None, help="日志文件路径 (默认: <output-dir>/extract.log)")
+    p_extract.add_argument("--field-mode", choices=["template", "fold"], default="template",
+                           help="字段主干方案: template(B, 默认, 裁剪到主导签名) / fold(A, 全路径并集)")
 
     # pipeline
     p_pipe = sub.add_parser("pipeline", help="三阶段全流水线")
     p_pipe.add_argument("root", help="语料库根目录/文件")
     p_pipe.add_argument("-o", "--output-dir", default="output", help="输出目录 (默认: output)")
     p_pipe.add_argument("-f", "--output-file", default=None, help="日志文件路径 (默认: <output-dir>/pipeline.log)")
+    p_pipe.add_argument("--field-mode", choices=["template", "fold"], default="template",
+                        help="字段主干方案: template(B, 默认) / fold(A, 全路径并集)")
 
     args = parser.parse_args()
 

@@ -145,7 +145,7 @@ class CsvParser(BaseParser):
             raise e
     def _save_discovery_report(self):
         """保存字段分析报告"""
-        logger.info(f"\n[+] CSV发现阶段报告开始写入。")
+        logger.info("\n[+] CSV发现阶段报告开始写入。")
  
         ##读取csv前几行获取字段schema和sample_value
         header_Sample=self._read_csv_safe(False,10)

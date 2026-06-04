@@ -1,7 +1,6 @@
 """多候选加权投票: 解开 txt 的真实格式。"""
 
 import re
-from statistics import stdev
 from typing import Dict, List
 
 from src.constants import SQL_KEYWORD_PATTERN, LOG_PATTERN

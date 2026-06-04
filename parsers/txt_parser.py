@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 from parsers.json_parser import JsonParser
 from parsers.sql_parser import SqlParser

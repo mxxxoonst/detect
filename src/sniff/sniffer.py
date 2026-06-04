@@ -3,7 +3,7 @@
 import re
 from typing import Tuple
 
-from src.constants import SNIFF_HEAD_BYTES, SNIFF_LINES, ACCEPT_THRESHOLD, SQLITE_MAGIC
+from src.constants import SNIFF_HEAD_BYTES, SNIFF_LINES, ACCEPT_THRESHOLD
 from src.utils.encoding import detect_encoding, safe_decode
 from src.utils.file_utils import read_head_bytes, read_first_bytes, is_binary, is_sqlite_magic, extension
 from src.utils.text_utils import first_n_nonempty_lines, regex_search

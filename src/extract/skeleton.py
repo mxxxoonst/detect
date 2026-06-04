@@ -20,6 +20,29 @@ def structure_signature(record: Any) -> str:
 
 
 def _signature(value: Any) -> str:
+    """
+    对一条 record 做深度优先递归，抹掉值、保留结构：
+
+  - dict → {"key":签名}，按 key
+  排序（sorted(value.items())）保证同结构不同顺序得到同一签名
+  - list → 只取首元素递归：[元素签名]（空列表为 []）
+  - 标量 → 类型标记 <int>/<str>/<float>/<bool>/<null>
+
+  以一条嵌套 record 为例：
+
+  {
+    "id": 1,
+    "user":   {"name": "Alice", "age": 30},
+    "tags":   ["a", "b"],
+    "orders": [{"oid": "X", "amt": 9.9}]
+  }
+
+  生成的签名串（注意 key 已排序、list 只看首元素）：
+
+  {"id":<int>,"orders":[{"amt":<float>,"oid":<str>}],"tags":[<str>],"user":{"a
+  ge":<int>,"name":<str>}}
+
+    """
     if value is None:
         return "<null>"
     if isinstance(value, bool):

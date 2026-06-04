@@ -4,7 +4,6 @@ import csv
 from statistics import stdev
 
 from src.parse.grade import Grade
-from src.utils.file_utils import count_lines
 
 
 def parse_csv(path: str, encoding: str) -> Grade:

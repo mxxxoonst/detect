@@ -1,0 +1,7 @@
+[
+  {"id": 1, "name": "Alice", "email": "alice@example.com"},
+  {"id": 2, "name": "Bob",   "email": "bob@example.com"},
+  {"product_id": "P001", "price": 99.9,  "category": "electronics"},
+  {"product_id": "P002", "price": 29.9,  "category": "books"},
+  {"product_id": "P003", "price": 149.0, "category": "electronics"}
+]
