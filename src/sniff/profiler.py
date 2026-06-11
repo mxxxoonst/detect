@@ -6,6 +6,9 @@ from typing import Any, Dict, List, Tuple
 from src.constants import LOW_CONF_THRESHOLD
 from src.sniff.sniffer import sniff_file
 from src.utils.file_utils import walk_files, extension
+from src.utils.logger import get_logger
+
+log = get_logger(__name__)
 
 
 def profile_corpus(root: str, files: list | None = None) -> Dict[str, Any]:
@@ -28,13 +31,20 @@ def profile_corpus(root: str, files: list | None = None) -> Dict[str, Any]:
     low_confidence: List[Tuple[str, str, float]] = []
 
     it: list = files if files is not None else list(walk_files(root))
-    for path in it:
+    total = len(it)
+    log.info("嗅探画像开始: root=%s, 文件数=%d", root, total)
+    for i, path in enumerate(it):
         fmt, enc, conf = sniff_file(path)
         ext = extension(path)
         cross_table[(ext, fmt)] += 1
         format_dist[fmt] += 1
         if conf < LOW_CONF_THRESHOLD:
             low_confidence.append((path, fmt, conf))
+        if (i + 1) % 500 == 0:
+            log.debug("  嗅探进度: %d/%d", i + 1, total)
+
+    log.info("嗅探画像完成: 格式分布=%s, 低置信样本=%d",
+             dict(format_dist), len(low_confidence))
 
     # 限制低置信样本数
     low_confidence = low_confidence[:200]

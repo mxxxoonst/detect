@@ -26,6 +26,9 @@ from src.extract.schema_types import SchemaPartition, SchemaUnit,FieldInfo
 from src.extract.skeleton import structure_signature
 from src.extract.value_profile import profile_value, aggregate_profiles
 from src.extract.pii_seed import key_name_implies_pii, infer_pii_type, is_free_text_field
+from src.utils.logger import get_logger
+
+log = get_logger(__name__)
 
 # 模块级全局计数器，单次 pipeline 运行内自增，不跨 run 持久化
 _UNIT_COUNTER = itertools.count(1)
@@ -37,12 +40,22 @@ def reset_unit_counter() -> None:
     _UNIT_COUNTER = itertools.count(1)
 
 
-def build_schema_unit(partition: SchemaPartition, mode: str = "template") -> SchemaUnit:
+def set_unit_counter(next_value: int) -> None:
+    """将 ID 计数器重设到指定起点（断点续跑：从已写 unit 的 max+1 继续，避免 ID 冲突）。"""
+    global _UNIT_COUNTER
+    _UNIT_COUNTER = itertools.count(next_value)
+
+
+def build_schema_unit(
+    partition: SchemaPartition, mode: str = "template", sample_mode: str = "off"
+) -> SchemaUnit:
     """消费 partition['record_iter']，一遍遍历组装五类信息，返回 SchemaUnit。
 
     Args:
         partition: schema_partition 产出的分片。
         mode: "template"（B，默认）裁剪到 most_common 签名主干；"fold"（A）取全路径并集。
+        sample_mode: 信息三样本保留方案，"off"（默认，守 PII 红线，不留原值）/
+                     "raw"（留原始样本）/ "masked"（留脱敏样本）。
 
     ⚠ record_iter 消费后不可重播。
     """
@@ -55,6 +68,8 @@ def build_schema_unit(partition: SchemaPartition, mode: str = "template") -> Sch
 
     # 空 partition 快速返回
     if not records:
+        log.warning("空分片(采到 0 条记录) %s [%s] → %s",
+                    partition["source_file"], partition["partition_id"], unit_id)
         return {
             "id":               unit_id,
             "source_file":      partition["source_file"],
@@ -102,8 +117,14 @@ def build_schema_unit(partition: SchemaPartition, mode: str = "template") -> Sch
         key_name = _extract_key_name(path)           # 折叠后路径的终端字段名
         values = template_values.get(path, [])
 
-        # 信息三：value 画像（⚠ 丢原值；同模板的所有下标值已聚合，画像不再碎片化）
-        vp = aggregate_profiles([profile_value(v) for v in values]) if values else {}
+        # 信息三：value 画像（同模板的所有下标值已聚合，画像不再碎片化）。
+        # 默认 sample_mode="off" 不留原值（守 PII 红线）；raw/masked 时按 pattern 去重留样。
+        vp = (
+            aggregate_profiles(
+                [profile_value(v) for v in values], values, sample_mode
+            )
+            if values else {}
+        )
 
         # occurrence：保留占位符 1.0（真值随 optional_field_grouping 一并落地）
         occ = 1.0
@@ -123,6 +144,10 @@ def build_schema_unit(partition: SchemaPartition, mode: str = "template") -> Sch
     # 回填 partition 的 field_paths 和 occurrence（占位 1.0）
     partition["field_paths"] = set(fields.keys())
     partition["occurrence"] = {p: 1.0 for p in fields}
+
+    log.debug("build_schema_unit %s [%s] mode=%s: 采样 %d 条, B=%d, 字段 %d 个",
+              unit_id, partition["partition_id"], mode,
+              len(records), skeleton_count_B, len(fields))
 
     return {
         "id":               unit_id,
@@ -248,7 +273,8 @@ def _most_common_skeleton_as_path_list(sig_counter: Counter) -> List[Tuple[str, 
         # 骨架签名使用非 JSON 的裸类型标记（<int> 等），需先加引号使其合法
         normalized = re.sub(r"<([^>]+)>", r'"<\1>"', most_common_sig)
         sig_obj = json.loads(normalized)
-    except Exception:
+    except Exception as e:
+        log.debug("骨架签名解析失败(B 方案返回空主干): %s | sig=%.120s", e, most_common_sig)
         return []
     result: List[Tuple[str, str]] = []
     _walk_sig(sig_obj, "", result)

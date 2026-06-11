@@ -4,6 +4,9 @@ import csv
 from statistics import stdev
 
 from src.parse.grade import Grade
+from src.utils.logger import get_logger
+
+log = get_logger(__name__)
 
 
 def parse_csv(path: str, encoding: str) -> Grade:
@@ -37,9 +40,11 @@ def _parse_delimited(path: str, encoding: str, sep: str, fmt: str) -> Grade:
                 good_rows += 1
     except Exception as e:
         if total_rows == 0:
+            log.warning("%s 解析失败(零行) %s: %s", fmt.upper(), path, e)
             return Grade(tier=3, I=0.0, fmt=fmt, encoding=encoding, error=str(e))
         # 部分成功
         I = good_rows / max(total_rows, 1)
+        log.debug("%s 解析中断但已读 %d 行 %s: %s", fmt.upper(), good_rows, path, e)
         return Grade(tier=2, I=I, fmt=fmt, encoding=encoding,
                      n_struct=_column_drift(col_counts) if col_counts else 0.0,
                      parsed={"type": fmt, "headers": headers, "good_rows": good_rows})
@@ -79,7 +84,8 @@ def _sniff_delimiter(path: str, encoding: str) -> str:
                     lines_read += 1
                     if len(col_counts) >= 20:
                         break
-        except Exception:
+        except Exception as e:
+            log.debug("分隔符 %r 嗅探失败 %s: %s", sep, path, e)
             continue
         if col_counts and len(col_counts) >= 2 and col_counts[0] >= 2:
             sd = stdev(col_counts) if len(col_counts) > 1 else 0.0

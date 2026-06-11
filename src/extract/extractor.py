@@ -10,6 +10,9 @@ from typing import Any, Dict, List, Tuple
 
 from src.parse.grade import Grade
 from src.extract.schema_types import SchemaUnit, VocabTable
+from src.utils.logger import get_logger
+
+log = get_logger(__name__)
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -19,6 +22,7 @@ from src.extract.schema_types import SchemaUnit, VocabTable
 def extract_all(
     tier1_grades: List[Grade],
     mode: str = "template",
+    sample_mode: str = "off",
 ) -> Tuple[List[SchemaUnit], VocabTable, Dict[str, Any]]:
     """Schema 单元化提取主入口。
 
@@ -27,6 +31,7 @@ def extract_all(
     Args:
         tier1_grades: tier1 种子。
         mode: 字段主干方案，"template"（B，默认）或 "fold"（A）。
+        sample_mode: 信息三样本保留，"off"（默认）/ "raw" / "masked"。
 
     Returns:
         schema_units  : 每个文件/表对应的 SchemaUnit 列表
@@ -37,6 +42,8 @@ def extract_all(
     from src.extract.schema_unit import build_schema_unit
     from src.extract.vocab_table import build_vocab_table
 
+    log.info("extract_all 开始: tier1 种子 %d 个, mode=%s", len(tier1_grades), mode)
+
     all_partitions = []
     partition_stats_list = []
 
@@ -44,10 +51,12 @@ def extract_all(
         parts, stats = partition_file(grade)
         all_partitions.extend(parts)
         partition_stats_list.append(stats)
+    log.info("分片完成: %d 个文件 → %d 个 partition", len(tier1_grades), len(all_partitions))
 
     schema_units: List[SchemaUnit] = [
-        build_schema_unit(p, mode=mode) for p in all_partitions
+        build_schema_unit(p, mode=mode, sample_mode=sample_mode) for p in all_partitions
     ]
+    log.info("SchemaUnit 构建完成: %d 个", len(schema_units))
 
     vocab_table, uncertain = build_vocab_table(schema_units)
 
@@ -55,17 +64,24 @@ def extract_all(
     global_view["partition_stats"] = partition_stats_list
     global_view["uncertain_vocab"] = uncertain
 
+    log.info("extract_all 完成: 语义类 %d, B=%d, A=%d, AB_ratio=%s, PII 种子 %d, uncertain %d",
+             len(vocab_table), global_view["shape_templates_B"],
+             global_view["naming_templates_A"], global_view["AB_ratio"],
+             global_view["pii_seeds_count"], len(uncertain))
+
     return schema_units, vocab_table, global_view
 
 
-def _aggregate_global_view(schema_units: List[SchemaUnit]) -> Dict[str, Any]:
-    """将所有 SchemaUnit 聚合为全局视图。"""
+def _aggregate_global_view(schema_units) -> Dict[str, Any]:
+    """将所有 SchemaUnit 聚合为全局视图（接受 list 或惰性迭代器，流式增量计数）。"""
     all_skeletons: Counter = Counter()
     all_field_names: set = set()
     pii_seeds_count = 0
     total_records = 0
+    unit_count = 0
 
     for unit in schema_units:
+        unit_count += 1
         total_records += unit.get("record_count", 0)
         for sig, cnt in unit.get("skeleton_counts", {}).items():
             all_skeletons[sig] += cnt
@@ -83,8 +99,69 @@ def _aggregate_global_view(schema_units: List[SchemaUnit]) -> Dict[str, Any]:
         "AB_ratio":             round(naming_A / max(shape_B, 1), 3),
         "pii_seeds_count":      pii_seeds_count,
         "total_records_sampled": total_records,
+        "schema_unit_count":    unit_count,
         "top_skeletons":        dict(all_skeletons.most_common(20)),
     }
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 流式 / 断点续跑入口（落盘消费，内存恒定 O(单文件)）
+# ════════════════════════════════════════════════════════════════════════════
+
+def stream_schema_units(
+    grades_iter,
+    mode: str,
+    append_unit,
+    done_source_files=frozenset(),
+    sample_mode: str = "off",
+) -> Tuple[int, int, int, int]:
+    """Pass1：逐 tier1 Grade 分片 + 构建 SchemaUnit，经 ``append_unit`` 回调即时落盘。
+
+    内存恒定（一次只持有单文件的分片与 unit）；``done_source_files`` 命中则跳过（续跑）。
+
+    Args:
+        grades_iter:        惰性产出 tier1 Grade 的迭代器。
+        mode:               字段主干方案 template/fold。
+        append_unit:        回调 ``append_unit(unit)`` 负责把单个 SchemaUnit 落盘。
+        done_source_files:  已处理的源文件集合（续跑跳过）。
+        sample_mode:        信息三样本保留，"off"（默认）/ "raw" / "masked"。
+
+    Returns:
+        (processed_files, partition_count, written_units, skipped_files)
+    """
+    from src.extract.schema_partition import partition_file
+    from src.extract.schema_unit import build_schema_unit
+
+    processed = pc = written = skipped = 0
+    for grade in grades_iter:
+        if grade.path in done_source_files:
+            skipped += 1
+            continue
+        processed += 1
+        parts, _stats = partition_file(grade)
+        pc += len(parts)
+        for p in parts:
+            append_unit(build_schema_unit(p, mode=mode, sample_mode=sample_mode))
+            written += 1
+        if processed % 200 == 0:
+            log.info("  阶段2 进度: 已处理 %d 文件, 累计写出 %d unit", processed, written)
+
+    return processed, pc, written, skipped
+
+
+def finalize_from_units(units_iter_factory) -> Tuple[VocabTable, Dict[str, Any]]:
+    """Pass2：两遍流式读 schema_units.jsonl，聚合 global_view + 构建 vocab_table。
+
+    ``units_iter_factory()`` 每次调用返回一个**新的** SchemaUnit 迭代器（如
+    ``lambda: iter_jsonl(units_path)``）。两遍分别喂全局聚合与词表聚类，
+    全局聚合内存恒定；词表聚类内存为 O(字段条目数)（跨单元同义对齐的固有代价）。
+    """
+    from src.extract.vocab_table import build_vocab_table
+
+    global_view = _aggregate_global_view(units_iter_factory())
+    vocab_table, uncertain = build_vocab_table(units_iter_factory())
+    global_view["uncertain_vocab"] = uncertain
+    return vocab_table, global_view
 
 
 # ════════════════════════════════════════════════════════════════════════════

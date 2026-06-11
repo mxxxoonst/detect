@@ -3,6 +3,10 @@
 from dataclasses import dataclass
 from typing import Any, Optional
 
+from src.utils.logger import get_logger
+
+log = get_logger(__name__)
+
 
 @dataclass
 class Grade:
@@ -24,6 +28,25 @@ class Grade:
     path: str = ""
 
 
+def grade_from_summary(d: dict) -> Grade:
+    """从 grades.jsonl 的一行摘要重建最小 Grade（供阶段2 流式消费）。
+
+    只重建下游 partition_file 实际需要的字段（path/fmt/encoding/tier/I 等），
+    不含 parsed（阶段2 从磁盘重读原文件，无需 parsed 负载）。
+    """
+    return Grade(
+        tier=d.get("tier"),
+        I=d.get("I"),
+        fmt=d.get("fmt", ""),
+        encoding=d.get("encoding", "utf-8"),
+        path=d.get("path", ""),
+        n_form=d.get("n_form"),
+        n_struct=d.get("n_struct"),
+        note=d.get("note"),
+        error=d.get("error"),
+    )
+
+
 def grade_parse(path: str, real_format: str, enc: str) -> Grade:
     """按真实范式路由到对应解析器。
 
@@ -40,6 +63,17 @@ def grade_parse(path: str, real_format: str, enc: str) -> Grade:
 
     fmt = real_format
 
+    grade = _route(fmt, path, enc,
+                   parse_json, parse_jsonl, parse_csv, parse_tsv,
+                   parse_sql_text, parse_sqlite)
+    log.debug("grade_parse %s: fmt=%s → tier=%s I=%s error=%s",
+              path, fmt, grade.tier, grade.I, grade.error)
+    return grade
+
+
+def _route(fmt, path, enc, parse_json, parse_jsonl, parse_csv, parse_tsv,
+           parse_sql_text, parse_sqlite) -> Grade:
+    """按格式分发到具体解析器，统一回填 path。"""
     if fmt == "sqlite":
         grade = parse_sqlite(path)
         grade.path = path

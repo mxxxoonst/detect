@@ -3,7 +3,10 @@
 import re
 from typing import Dict, List
 
-from src.constants import SQL_KEYWORD_PATTERN, LOG_PATTERN
+from src.constants import (
+    SQL_KEYWORD_PATTERN, SQL_STRONG_PATTERN,
+    LOG_PATTERN, LOG_TS_PREFIX_PATTERN, LOG_LEVEL_PATTERN,
+)
 from src.utils.text_utils import (
     balanced_brackets,
     column_stability,
@@ -43,12 +46,24 @@ def vote_format(lines: List[str], full_text: str) -> Dict[str, float]:
     _vote_delimited(lines, scores, n)
 
     # ── SQL: txt 里夹 SQL 语句 ──
-    if re.search(SQL_KEYWORD_PATTERN, full_text, re.IGNORECASE):
+    # 强 DDL/DML 标记 (CREATE TABLE / INSERT INTO ...) → 0.95，压过 CSV 的 0.9；
+    # 否则弱 SQL 关键词 (SELECT...FROM 等) → 0.7
+    if re.search(SQL_STRONG_PATTERN, full_text, re.IGNORECASE):
+        scores["sql"] += 0.95
+    elif re.search(SQL_KEYWORD_PATTERN, full_text, re.IGNORECASE):
         scores["sql"] += 0.7
 
     # ── 日志行: 时间戳/级别模式 ──
-    log_hits = sum(1 for line in lines if re.search(LOG_PATTERN, line, re.IGNORECASE))
-    if log_hits / n > 0.6:
+    # 强信号(行首时间戳 + 级别 双命中) → 0.95，压过 CSV/JSON 的 0.9；否则弱信号 → 0.85
+    strong_log = sum(
+        1 for line in lines
+        if re.search(LOG_TS_PREFIX_PATTERN, line)
+        and re.search(LOG_LEVEL_PATTERN, line, re.IGNORECASE)
+    )
+    weak_log = sum(1 for line in lines if re.search(LOG_PATTERN, line, re.IGNORECASE))
+    if strong_log / n > 0.6:
+        scores["log"] += 0.95
+    elif weak_log / n > 0.6:
         scores["log"] += 0.85
 
     # ── 自由文本: 长句、标点密度低、无强结构信号 ──

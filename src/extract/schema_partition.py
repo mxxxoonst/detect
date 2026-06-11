@@ -18,11 +18,15 @@ from statistics import stdev
 from typing import Dict, Iterator, List, Tuple
 
 import ijson
+import json5
 
 from src.constants import SAMPLE_PER_FILE, SNIFF_HEAD_BYTES
 from src.extract.schema_types import PartitionStats, SchemaPartition
 from src.extract.skeleton import structure_signature
 from src.parse.grade import Grade
+from src.utils.logger import get_logger
+
+log = get_logger(__name__)
 
 _INSERT_HEADER_RE = re.compile(
     r"INSERT\s+INTO\s+[`'\"]?(\w+)[`'\"]?\s*(?:\(([^)]+)\))?", re.IGNORECASE
@@ -62,6 +66,8 @@ def partition_file(grade: Grade) -> Tuple[List[SchemaPartition], PartitionStats]
         "partition_ids":   [p["partition_id"] for p in parts],
         "method":          method,
     }
+    log.debug("partition_file %s: fmt=%s method=%s → %d 分片",
+              grade.path, fmt, method, len(parts))
     return parts, stats
 
 
@@ -79,7 +85,7 @@ def _partition_json(path: str, encoding: str) -> Tuple[List[SchemaPartition], st
         if parts:
             return parts, "explicit_key"
 
-    buckets = _cluster_by_skeleton_json(path)
+    buckets = _cluster_by_skeleton_json(path, encoding)
     parts = [
         _make_partition(path, "json", sig_id, iter(records))
         for sig_id, records in buckets.items()
@@ -93,9 +99,19 @@ def _detect_explicit_keys(path: str, encoding: str) -> Dict[str, list] | None:
         with open(path, "rb") as f:
             raw = f.read(SNIFF_HEAD_BYTES)
         text = raw.decode(encoding, errors="replace")
+    except Exception as e:
+        log.debug("显式 key 探测读取失败, 回退骨架聚类 %s: %s", path, e)
+        return None
+
+    try:
         data = json.loads(text)
     except Exception:
-        return None
+        # json5 容错（注释/单引号/尾逗号）；head 截断时也可能失败 → 回退骨架聚类
+        try:
+            data = json5.loads(text)
+        except Exception as e:
+            log.debug("显式 key 探测 json/json5 均失败, 回退骨架聚类 %s: %s", path, e)
+            return None
 
     if not isinstance(data, dict):
         return None
@@ -108,11 +124,11 @@ def _detect_explicit_keys(path: str, encoding: str) -> Dict[str, list] | None:
     return result if result else None
 
 
-def _cluster_by_skeleton_json(path: str) -> Dict[str, list]:
+def _cluster_by_skeleton_json(path: str, encoding: str = "utf-8") -> Dict[str, list]:
     """ijson 流式读顶层数组，按 structure_signature 归桶。"""
     buckets: Dict[str, list] = defaultdict(list)
 
-    for rec in _stream_json_records(path):
+    for rec in _stream_json_records(path, encoding):
         if not isinstance(rec, dict):
             continue
         sig = structure_signature(rec)
@@ -123,24 +139,50 @@ def _cluster_by_skeleton_json(path: str) -> Dict[str, list]:
     return dict(buckets)
 
 
-def _stream_json_records(path: str) -> Iterator[dict]:
-    """ijson 流式迭代顶层数组；失败时回退 json.load 整体加载。"""
+def _stream_json_records(path: str, encoding: str = "utf-8") -> Iterator[dict]:
+    """流式迭代顶层数组记录，宽容度与 parse 阶段对齐。
+
+    1. 快路径：ijson 二进制流式（UTF-8），干净大文件内存恒定。
+    2. 兜底：按探测编码读文本，json 严格 → json5 容错。
+       覆盖 GBK 等非 UTF-8 编码 + 注释/单引号/尾逗号等 JSON5 语法，
+       与 json_parser._json_tolerant 一致——避免"只靠容错进 tier1"的
+       JSON 文件在分片阶段零产出（见 gbk_users / noisy_trailing_comma）。
+    """
+    yielded = 0
     try:
         with open(path, "rb") as f:
             for item in ijson.items(f, "item"):
+                yielded += 1
                 yield item
         return
-    except Exception:
-        pass
+    except Exception as e:
+        log.debug("ijson 流式读失败, 回退容错整体加载 %s: %s", path, e)
+        if yielded:
+            # 已流式产出部分记录，再走整文件兜底会重复 → 保留已得部分
+            log.debug("ijson 崩溃前已产出 %d 条, 跳过兜底以免重复 %s", yielded, path)
+            return
+
     try:
-        with open(path, "rb") as f:
-            data = json.load(f)
-        if isinstance(data, list):
-            yield from data
-        elif isinstance(data, dict):
-            yield data
+        with open(path, "r", encoding=encoding, errors="replace") as f:
+            text = f.read()
+    except Exception as e:
+        log.warning("JSON 文本读取失败 %s: %s", path, e)
+        return
+
+    data = None
+    try:
+        data = json.loads(text)
     except Exception:
-        pass
+        try:
+            data = json5.loads(text)
+        except Exception as e:
+            log.warning("JSON 严格与 json5 容错均失败 %s: %s", path, e)
+            return
+
+    if isinstance(data, list):
+        yield from data
+    elif isinstance(data, dict):
+        yield data
 
 
 # ── JSONL ─────────────────────────────────────────────────────────────────────
@@ -148,6 +190,7 @@ def _stream_json_records(path: str) -> Iterator[dict]:
 def _partition_jsonl(path: str, encoding: str) -> Tuple[List[SchemaPartition], str]:
     """JSONL 无显式包装 key，直接骨架聚类。"""
     buckets: Dict[str, list] = defaultdict(list)
+    bad = 0
 
     try:
         with open(path, "r", encoding=encoding, errors="replace") as f:
@@ -158,15 +201,20 @@ def _partition_jsonl(path: str, encoding: str) -> Tuple[List[SchemaPartition], s
                 try:
                     rec = json.loads(line)
                 except json.JSONDecodeError:
+                    bad += 1
                     continue
                 if not isinstance(rec, dict):
+                    bad += 1
                     continue
                 sig = structure_signature(rec)
                 sig_id = "sig_" + hashlib.sha256(sig.encode()).hexdigest()[:8]
                 if len(buckets[sig_id]) < SAMPLE_PER_FILE:
                     buckets[sig_id].append(rec)
-    except Exception:
-        pass
+    except Exception as e:
+        log.warning("JSONL 分片读取失败 %s: %s", path, e)
+
+    if bad:
+        log.debug("JSONL 分片 %s: 跳过 %d 个坏行/非 dict 行", path, bad)
 
     parts = [
         _make_partition(path, "jsonl", sig_id, iter(records))
@@ -183,6 +231,8 @@ def _partition_csv(
     """整文件单 partition，含列稳定性检测。"""
     sep = "\t" if fmt == "tsv" else _sniff_sep(path, encoding)
     is_noisy = _check_col_stability(path, encoding, sep)
+    if is_noisy:
+        log.debug("%s 列不稳定(noisy), 下游将跳过拓扑: %s", fmt.upper(), path)
 
     def _iter_records():
         # 流式：逐行剥 NUL 喂给 csv.DictReader（多行引号字段由 csv 跨行重组，
@@ -202,7 +252,8 @@ def _partition_csv(
                 valid_rows = (r for r in clean_rows if len(r) >= 2)
                 for clean in islice(valid_rows, SAMPLE_PER_FILE):
                     yield clean
-        except Exception:
+        except Exception as e:
+            log.warning("CSV/TSV 流式分桶失败 %s: %s", path, e)
             return
 
     part = _make_partition(path, fmt, "table", _iter_records())
@@ -221,7 +272,8 @@ def _check_col_stability(path: str, encoding: str, sep: str) -> bool:
                 stripped = line.strip()
                 if stripped:
                     col_counts.append(stripped.count(sep) + 1)
-    except Exception:
+    except Exception as e:
+        log.debug("列稳定性检测失败(默认 not noisy) %s: %s", path, e)
         return False
 
     if len(col_counts) < 2:
@@ -305,8 +357,8 @@ def _partition_sql(path: str, encoding: str) -> Tuple[List[SchemaPartition], str
                 if line_strip.endswith(";"):
                     current_table = None
                     current_cols = []
-    except Exception:
-        pass
+    except Exception as e:
+        log.warning("SQL 分片扫描失败 %s: %s", path, e)
 
     parts = [
         _make_partition(path, "sql", tname, iter(records[:SAMPLE_PER_FILE]))
@@ -374,15 +426,15 @@ def _partition_sqlite(grade: Grade) -> Tuple[List[SchemaPartition], str]:
                 cur = conn.execute(f"SELECT * FROM [{tname}] LIMIT {SAMPLE_PER_FILE}")
                 col_names = [d[0] for d in cur.description]
                 rows = [dict(zip(col_names, row)) for row in cur]
-            except Exception:
-                pass
+            except Exception as e:
+                log.warning("SQLite 表 %s SELECT 失败 %s: %s", tname, grade.path, e)
 
             if rows:
                 parts.append(_make_partition(grade.path, "sqlite", tname, iter(rows)))
 
         conn.close()
-    except Exception:
-        pass
+    except Exception as e:
+        log.warning("SQLite 打开/读表名失败 %s: %s", grade.path, e)
 
     return parts, "table_name"
 

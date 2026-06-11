@@ -3,6 +3,9 @@
 import re
 
 from src.parse.grade import Grade
+from src.utils.logger import get_logger
+
+log = get_logger(__name__)
 
 
 CREATE_INSERT_RE = re.compile(
@@ -18,6 +21,7 @@ def parse_sql_text(path: str, encoding: str) -> Grade:
         with open(path, "r", encoding=encoding, errors="replace") as f:
             text = f.read(65536)  # 只读前 64KB, SQL schema 一般不大
     except Exception as e:
+        log.warning("SQL 读头失败 %s: %s", path, e)
         return Grade(tier=3, I=0.0, fmt="sql", encoding=encoding, error=str(e))
 
     if not text.strip():
@@ -48,6 +52,8 @@ def parse_sql_text(path: str, encoding: str) -> Grade:
         unclosed = _check_unclosed_quotes(statements)
         if unclosed > 0:
             incomplete_info = f"{unclosed} statements with unclosed quotes"
+            log.debug("SQL %s: %d/%d 完整语句, %d 条引号不配对",
+                      path, complete, total, unclosed)
 
     return Grade(tier=tier, I=I, fmt="sql", encoding=encoding,
                  parsed={

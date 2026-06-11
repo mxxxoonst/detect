@@ -3,5 +3,5 @@
   <component name="Black">
     <option name="sdkName" value="uv (detect)" />
   </component>
-  <component name="ProjectRootManager" version="2" project-jdk-name="uv (detect)" project-jdk-type="Python SDK" />
+  <component name="ProjectRootManager" version="2" project-jdk-name="uv SSH (sftp://root@172.17.66.200:22/data/header_parser/zlf/PII_detect/detect/.venv/bin/python3.12)" project-jdk-type="Python SDK" />
 </project>

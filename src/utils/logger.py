@@ -23,11 +23,6 @@ def setup_logger(
         配置好的 logging.Logger 实例
     """
     logger = logging.getLogger(name)
-
-    # 避免重复添加 handler
-    if logger.handlers:
-        return logger
-
     logger.setLevel(level)
 
     fmt = logging.Formatter(
@@ -35,12 +30,20 @@ def setup_logger(
         datefmt="%H:%M:%S",
     )
 
-    if stream:
+    # 按 handler 类型分别幂等：允许在已有 stream handler 的 logger 上
+    # 后续补挂 file handler（main.py 先 import 触发模块级单例，再带 file 重配根 logger）
+    has_stream = any(
+        isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler)
+        for h in logger.handlers
+    )
+    has_file = any(isinstance(h, logging.FileHandler) for h in logger.handlers)
+
+    if stream and not has_stream:
         handler = logging.StreamHandler(sys.stdout)
         handler.setFormatter(fmt)
         logger.addHandler(handler)
 
-    if file:
+    if file and not has_file:
         Path(file).parent.mkdir(parents=True, exist_ok=True)
         file_handler = logging.FileHandler(file, encoding="utf-8")
         file_handler.setFormatter(fmt)

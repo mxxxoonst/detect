@@ -13,6 +13,9 @@ from difflib import SequenceMatcher
 from typing import Dict, List,  Tuple
 
 from src.extract.schema_types import KeyEntry, SchemaUnit, VocabTable
+from src.utils.logger import get_logger
+
+log = get_logger(__name__)
 
 # 阈值常量
 _PROFILE_SIM_THRESHOLD = 0.7   # value 画像相似度 ≥ 此值视为同义
@@ -32,10 +35,13 @@ def build_vocab_table(
     """
     entries = _collect_key_entries(schema_units)
     if not entries:
+        log.info("build_vocab_table: 无字段 entry, 返回空表")
         return {}, []
 
     clusters = _initial_clusters_by_bc(entries)
     vocab_table, uncertain_list = _build_inverted_index(clusters, entries)
+    log.info("build_vocab_table: %d 字段 entry → %d 聚类 → %d 语义类, %d uncertain",
+             len(entries), len(clusters), len(vocab_table), len(uncertain_list))
     return vocab_table, uncertain_list
 
 

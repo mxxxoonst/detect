@@ -8,6 +8,9 @@ from pathlib import Path
 from src.parse.grade import Grade
 from src.utils.encoding import safe_decode
 from src.utils.file_utils import count_lines, read_head_bytes
+from src.utils.logger import get_logger
+
+log = get_logger(__name__)
 
 
 def parse_json(path: str, encoding: str) -> Grade:
@@ -92,9 +95,12 @@ def _ijson_count_items(path: str) -> tuple:
                     good += 1
                     last_good_pos = tracker.pos
                 return good, False, last_good_pos   # 无崩溃
-            except Exception:
+            except Exception as e:
+                log.debug("ijson 流式中途崩溃 %s: 已读 %d 项, %d 字节 (%s)",
+                          path, good, last_good_pos, e)
                 return good, True, last_good_pos    # 崩溃前的计数
-    except OSError:
+    except OSError as e:
+        log.warning("JSON 文件打开失败 %s: %s", path, e)
         return 0, True, 0
 
 
@@ -118,6 +124,8 @@ def parse_jsonl(path: str, encoding: str) -> Grade:
             return Grade(tier=3, I=0.0, fmt="jsonl", encoding=encoding)
 
         I = good / total if total > 0 else 0.0
+        if bad:
+            log.debug("JSONL %s: %d 好行 / %d 坏行 (I=%.3f)", path, good, bad, I)
         if I == 1.0:
             return Grade(tier=1, I=1.0, fmt="jsonl", encoding=encoding,
                          parsed={"type": "jsonl", "units": good})
@@ -125,6 +133,7 @@ def parse_jsonl(path: str, encoding: str) -> Grade:
                      n_form="jsonl_parse_error",
                      parsed={"type": "jsonl", "units": good, "bad_lines": bad})
     except Exception as e:
+        log.warning("JSONL 解析失败 %s: %s", path, e)
         return Grade(tier=3, I=0.0, fmt="jsonl", encoding=encoding, error=str(e))
 
 
@@ -166,6 +175,8 @@ def _json_tolerant(path: str, encoding: str, text: str, strict_error: str) -> Gr
             note=f"json5 tolerant recovery, I={I:.3f}",
         )
     except Exception as e2:
+        log.warning("JSON json5 容错也失败 %s: strict=%s; tolerant=%s",
+                    path, strict_error, e2)
         return Grade(tier=3, I=0.0, fmt="json", encoding=encoding,
                      error=f"strict: {strict_error}; tolerant: {e2}")
 

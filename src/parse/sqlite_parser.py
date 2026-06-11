@@ -3,6 +3,9 @@
 import sqlite3
 
 from src.parse.grade import Grade
+from src.utils.logger import get_logger
+
+log = get_logger(__name__)
 
 
 def parse_sqlite(path: str) -> Grade:
@@ -17,12 +20,16 @@ def parse_sqlite(path: str) -> Grade:
 
         if tables:
             schema = [{"name": t[0], "sql": t[1]} for t in tables]
+            log.debug("SQLite %s: 读到 %d 张表", path, len(tables))
             return Grade(tier=1, I=1.0, fmt="sqlite",
                          parsed={"type": "sqlite", "tables": schema, "table_count": len(tables)},
                          note=f"{len(tables)} tables readable")
+        log.warning("SQLite %s: sqlite_master 无表", path)
         return Grade(tier=3, I=0.0, fmt="sqlite",
                      note="no tables found in sqlite_master")
     except sqlite3.Error as e:
+        log.warning("SQLite 打开/读 schema 失败 %s: %s", path, e)
         return Grade(tier=3, I=0.0, fmt="sqlite", error=str(e))
     except Exception as e:
+        log.error("SQLite 非预期失败 %s: %s", path, e)
         return Grade(tier=3, I=0.0, fmt="sqlite", error=str(e))

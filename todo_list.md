@@ -14,78 +14,61 @@
 | `vocab_table.py`（build_vocab_table，词汇表） | ✅ 已完成（`profile_similarity` 占位，见待完成项） |
 | `extractor.py` 新增 `extract_all()` | ✅ 已完成 |
 | `main.py` 写出新格式报告 | ✅ 已完成（schema_units.json / vocab_table.json） |
-| 三个测试文件（126 用例） | ✅ 已完成，全部通过 |
+| 测试套件（当前 165 用例） | ✅ 已完成，全部通过 |
 | `extract_five_infos()` 改为薄包装 | ✅ 已完成（复用 extract_all 拍平为全局扁平视图，删除约 300 行重复 _iter 逻辑） |
+| 全流水线日志埋点 + `pii_detect` 根命名空间 + `-v` | ✅ 已完成（详见 docs/guides.md §7） |
+| 分片阶段 JSON 容错对齐（编码 + json5） | ✅ 已完成（`_stream_json_records(path, encoding)` 兜底，修掉 GBK/JSON5 文件零产出；见待完成项 3.3 说明） |
+| 阶段间落盘流式 + 断点续跑（内存恒定） | ✅ 已完成（`grades.jsonl` / `schema_units.jsonl` 流式追加，CLI 走流式版 `stream_schema_units`+`finalize_from_units`，`--restart` 强制重来；见待完成项 6） |
 | `profile_similarity()` 完整实现 | ⚠️ 占位版本（见待完成项 2） |
-| 分片误 split 与分片阶段边界 | 🟡 部分（字段路径对齐随待完成项 5、CSV 整文件 load(3.2)已修；见待完成项 3，仅剩分桶判据误 split(3.1)、大 JSON 丢弃(3.3)未做，Tier B 方案已存档） |
+| 分片误 split 与分片阶段边界 | 🟡 部分（字段路径对齐随待完成项 5、CSV 整文件 load(3.2)已修、编码/JSON5 容错已修；见待完成项 3，仅剩分桶判据误 split(3.1)、64KB explicit-key 上限+大顶层 object 丢弃(3.3)未做，Tier A/B 方案已存档） |
 | 分片策略现状 + `optional_field_grouping` 保留接口 | 📝 已存档（见待完成项 4，接口暂不实现） |
 | SchemaUnit 五类信息双方案（A 折叠并集 / B 模板路径） | ✅ 已实现（见待完成项 5；`build_schema_unit(p, mode=...)`，CLI `--field-mode`，默认 B） |
+| `value_profile.py` 重构（MECE 宏桶 + 脚本直方图 + 同源 pattern + 样本保留 flag） | ✅ 已完成（单趟 unicodedata 7 宏桶 + 8 脚本直方图 + 同源 pattern；样本默认关，`--keep-samples`/`--mask-samples` 显式开） |
+| 签名基数爆炸：根因 / 无损收敛 / B 聚类近线性化 | 📝 已存档（见待完成项 7，串起 2 / 3.1 / 4，含 Pass2 卡死诊断与落地顺序） |
 
 ---
 
 ## 待完成项
 
-### 1. `extract_five_infos()` 改为 `extract_all()` 的薄包装
+### 1. `extract_five_infos()` 改为 `extract_all()` 的薄包装 ✅ 已完成
 
-**文件**: `src/extract/extractor.py`
-
-**当前状态**: `extract_five_infos()` 与 `extract_all()` 各自独立实现，逻辑重复。
-
-**目标**: 将 `extract_five_infos()` 改为薄包装，复用 `extract_all()` 的结果：
-
-```python
-def extract_five_infos(tier1_grades: List[Grade]) -> Dict[str, Any]:
-    """保留接口兼容性，内部调用 extract_all() 取 global_view 返回。"""
-    _, _, global_view = extract_all(tier1_grades)
-    # 将 global_view 格式转换为原有 extract_five_infos 输出格式
-    return {
-        "skeletons":            global_view.get("top_skeletons", {}),
-        "shape_templates_B":    global_view.get("shape_templates_B", 0),
-        "field_vocab":          {},   # global_view 不含 field_vocab，按需补充
-        "naming_templates_A":   global_view.get("naming_templates_A", 0),
-        "AB_ratio":             global_view.get("AB_ratio", 0.0),
-        "value_profiles":       {},   # global_view 不含 per-path 画像，按需补充
-        "topology":             {},
-        "pii_seeds":            {},
-        "total_records_sampled": global_view.get("total_records_sampled", 0),
-    }
-```
-
-**注意**: 改动前需确认现有 49 个 `extract_five_infos` 相关测试仍通过。
+`extract_five_infos()` 现为 `extract_all()` 的薄包装：跑新管线后把每个 SchemaUnit
+（折叠路径）拍平成旧的全局扁平五类信息 dict（无溯源，新代码勿用，见 docs/guides.md §6）。
+已删约 300 行重复 `_iter` 逻辑，测试全通过。
 
 ---
 
 ### 2. `profile_similarity()` 完整实现
 
+> ⚠ **本项的真实度量 + 近线性化已并入待完成项 7.3**（含分块/LSH 把 O(n²) 降到近线性后才真正
+> 打开 B 证据）。此处仅留"占位现状 + 致命错配"的速记，详细落地见 §7.3。
+
 **文件**: `src/extract/vocab_table.py`
 
-**当前占位逻辑**（仅 type + length）：
-```python
-def profile_similarity(p1, p2) -> float:
-    # type 不同 → 0.0
-    # type 相同有 len_dist → 0.5 + 0.5 × min/max 比
-    # type 相同无 len_dist → 0.8
-```
+**当前占位逻辑（且已错配）**：`profile_similarity` 读 `p.get("type")`，
+但 `aggregate_profiles()` 聚合后的 value_profile **根本没有 `type` 键**（那是单值
+`profile_value` 的键；聚合用的是 `len_dist` / `avg_char_dist` / `top_patterns` / `avg_scripts`）。
+→ **B 证据恒返回 0.0**，`_initial_clusters_by_bc` 的 O(n²) 两两比既算错又是纯无用功（见 §7.1(b)）。
 
-**目标**: 接入 `aggregate_profiles()` 已产出的 `avg_char_dist` 字段，做多维度加权相似度：
+**目标**: 用重构后的 `aggregate_profiles()` 字段做多维度加权（字段名已更新）：
 
 ```python
 def profile_similarity(p1: dict, p2: dict) -> float:
     """
     多维度加权:
-      - type 不同 → 0.0（硬截断）
-      - len_dist.mean 比值          权重 0.4
-      - avg_char_dist 各维度差值    权重 0.4
-        (digit_pct, alpha_pct, cjk_pct 各占 1/3)
-      - top_patterns 重叠率          权重 0.2
+      - dtype 门 (取自 len_dist 是否存在 / top_patterns) 不一致 → 0.0
+      - len_dist.mean / std 接近度                         权重 0.4
+      - avg_char_dist 7 宏桶向量余弦 / 1−JSD               权重 0.4
+        (number/letter/mark/punct/symbol/space/other; MECE 和=1, 是合法概率分布)
+      - top_patterns 两集合 Jaccard                        权重 0.2
+      - (可选) avg_scripts 直方图距离
     """
 ```
 
-**前提**: `profile_value()` 已产出 `avg_char_dist` 和 `top_patterns`（当前已实现），
-`aggregate_profiles()` 已将其聚合到 unit 级别的 value_profile 中。
-改动仅在 `vocab_table.py` 内，不影响上游。
-
+**前提**: `aggregate_profiles()` 已产出 `avg_char_dist`(7 宏桶) / `avg_scripts` / `top_patterns` /
+`len_dist`（均已实现）。改动仅在 `vocab_table.py` 内，不影响上游。
 **阈值**: `_PROFILE_SIM_THRESHOLD = 0.7` 保持不变，需在 test_data/samples 上验证聚类效果。
+**前置**: 必须先做 §7.3 的分块/LSH（否则 O(n²) 跑不动），并先用 §7.4 ① 的护栏止血。
 
 ---
 
@@ -118,11 +101,19 @@ def profile_similarity(p1: dict, p2: dict) -> float:
 `islice` 到 `SAMPLE_PER_FILE`，内存降到 O(单行)，大文件读够即停。多行引号字段由 csv
 跨行重组（`newline=""`），不受逐行影响；同时清理了不再需要的 `import io`。
 
-#### 3.3 大体积 explicit-key JSON 静默丢弃（未做）
+#### 3.3 大体积 explicit-key JSON 静默丢弃（部分已修）
 
-**问题**：`_detect_explicit_keys` 只 `json.loads` 前 64KB，文件 >64KB 解析失败 → 落
+> **已修（本轮）**：编码与 JSON5 语法导致的零产出。`_stream_json_records(path, encoding)` 和
+> `_detect_explicit_keys` 已补「按 `grade.encoding` 读文本 → json 严格 → json5 容错」兜底，
+> 修掉 **GBK 编码** JSON（ijson 硬走 UTF-8 抛错）与 **JSON5 脏数据**（注释/单引号/尾逗号）
+> 在分片阶段静默零产出的问题。详见 docs/guides.md §4.2。
+>
+> **仍未做**：下面的 **64KB explicit-key 上限 + 大顶层 object 丢弃**——属于"大体积/结构"维度，
+> 与编码/语法正交，需 Tier A/B 流式状态机方案。
+
+**问题**：`_detect_explicit_keys` 只读前 64KB，文件 >64KB 时显式 key 检测失效 → 落
 `_cluster_by_skeleton_json`，而 `ijson.items(f,"item")` 对顶层 object 不 yield 也不抛异常
-（兜底 `json.load` 进不去）→ **0 partition，文件消失**。同时 explicit-key 检测受 64KB 上限。
+（容错兜底虽能进，但对 GB 级大对象仍需整体构建）→ 大体积包装 object 风险。同时 explicit-key 检测受 64KB 上限。
 
 ##### 技术方案 Tier B：`ijson.parse` 前缀栈状态机（待实现，先存档）
 
@@ -269,6 +260,150 @@ def optional_field_grouping(records, field_freq):
 - **暴露方式（决策 4）**：`build_schema_unit(partition, mode="template"|"fold")`，**默认 `template`（B 方案）**，
   `fold`（A 方案）经 flag 开启；`extract_all` 透传，CLI 加对应开关。
 - **depth 口径**：`orders[].amt` → depth 2（只数 `.`），`tags[]` → depth 1，`meta.geo.lat` → depth 3。
+
+---
+
+### 6. 阶段间落盘流式 + 断点续跑 ✅ 已完成（含残留方向）
+
+**动机**：原 CLI（`extract`/`pipeline`）把全部 `tier1_grades` 收进 list 再交 `extract_all`，
+且 `extract_all` 内部把 `all_partitions` + `schema_units`（五类信息全集）全量驻留内存、
+末尾 `_save_output(schema_units, "schema_units.json")` 整体序列化。**46000 文件 / GB 级下内存爆**，
+且全程无中间落盘 → OOM/网络/其它中断 = 已解析信息全丢、无法续跑。
+
+**已落地**：
+- 阶段1 `_stream_grades`：逐文件 sniff+grade → **即时追加** `grades.jsonl`，内存恒定 O(1)。
+- 阶段2 `stream_schema_units`（extractor.py）：流式读 `grades.jsonl`(tier1) → 逐文件 partition→build_unit
+  → **即时追加** `schema_units.jsonl`；`finalize_from_units` 两遍流式聚合 global_view + vocab_table。
+- **断点续跑**：`grades.jsonl` 按 path 跳过已处理；`schema_units.jsonl` 按 `source_file` 跳过，
+  ID 计数器 `set_unit_counter(max_seq+1)` 续接；崩溃截断尾行由 `iter_jsonl` 容错跳过；`--restart` 强制重来。
+- `pipeline` 的 phase0 交叉表改为从 `grades.jsonl` 派生，省去原 `profile_corpus` 的额外整轮嗅探。
+- 关键事实：`partition_file` 只用 `grade.path/fmt/encoding` 并从磁盘重读原文件，故阶段间只需传轻量行
+  （`grade_from_summary` 重建最小 Grade），无需完整 Grade/parsed 负载。
+
+**残留方向（未做）**：
+1. **vocab 聚类仍 O(字段条目数)内存**：`finalize_from_units` 第二遍把所有 KeyEntry 收进内存做并查集聚类。
+   46000 文件 × 平均字段数可能上百万条目（每条含 value_profile 小 dict），峰值仍可观。
+   未来可考虑：value 画像做 LSH/分桶外部化，或按语义类分片聚类，避免全量 KeyEntry 驻留。
+2. **`schema_units.jsonl` 体量**：每分片一行全量五类信息，超大语料文件本身会很大；
+   如需可加分卷（按文件数滚动）或压缩（gzip 行）。
+3. **续跑粒度为"文件级"**：单文件内分片中途崩溃会整文件重做（幂等，无错但有重复计算）；
+   当前可接受，若单文件巨大可细化到分片级 checkpoint。
+
+---
+
+### 7. 签名基数爆炸：根因、无损收敛与 B 聚类近线性化
+
+> 本项汇总两轮讨论，串起三个已存在的散点（待完成项 2 / 3.1 / 4），给出
+> 「为什么阶段2会卡死 + 怎么治本（不丢信息）」的完整链路。
+
+#### 7.1 根因诊断：尾段 unit 暴涨 + Pass2 卡死
+
+实测日志：
+```
+阶段2 进度: 已处理 3800 文件, 累计写出 21601 unit   (正常 ~5.7 unit/文件)
+阶段2 Pass1 完成: 处理 3926 文件(跳过 17), 新写出 79346 unit
+                  ↑ 尾段 126 文件 +57745 unit ≈ 458 unit/文件 (~80×)
+随后终端静默, 程序无法继续。
+```
+
+两个独立病因：
+
+**(a) 签名基数爆炸（写出端）**：`structure_signature` 被 `_cluster_by_skeleton_json` /
+`_partition_jsonl` 当分桶 key，「签名严格相等才同桶」。但签名会因下面这些**非本质差异**裂开——
+它们都是「同一张逻辑表 + 稀疏/脏数据」，**不是不同 schema**：
+
+| 裂开诱因 | 例 | 后果 |
+|----------|-----|------|
+| 可选字段在/不在 | `{a,b}` vs `{a,b,c}` | k 个可选字段 → 最多 **2ᵏ** 签名 |
+| 可空字段 | 某字段 `<str>` vs `<null>` | ×2 签名 |
+| 类型漂移 | `<int>`/`<float>`/`<str>` 互换 | 各 1 签名 |
+| 空列表 vs 有元素 | `[]` vs `[<str>]` | ×2 签名 |
+
+一个 12 可选字段的记录类型，单文件就能炸出 ~4096 签名 = ~4096 unit。尾段 458 unit/文件正是
+这种组合噪声，**不是真有 458 种 schema**。（顺序敏感导致的误 split 见待完成项 3.1，与此正交叠加。）
+
+**(b) O(n²) 空转 + 无日志（聚合端，卡死的直接原因）**：`vocab_table.py:_initial_clusters_by_bc`
+的 B 证据是**全字段两两比**（`for i: for j>i`），entry 数 = 全语料字段条目（数十万～百万级），
+O(n²) 直接卡死；且循环内**无任何日志** → 终端静默。雪上加霜：`profile_similarity` 读
+`p.get("type")`，而**聚合后的 value_profile 根本没有 `type` 键** → B 恒返回 0.0 → 这个 O(n²)
+既**算错**又是**纯无用功**（详见待完成项 2）。
+
+#### 7.2 无损收敛：折叠噪声，而非砍长尾
+
+top-K 截断签名桶是**有损**的（长尾里可能藏稀有但带 PII 的字段），不可取。更好的杠杆是把
+7.1(a) 那些非本质差异**折叠掉**——对字段信息**无损**，因为它们本就不是不同 schema。
+
+关键事实：形状多样性**已被** `skeleton_count_B` / `skeleton_counts`（逐记录签名计数，top-50）
+以统计量记住。「按签名切 partition」与 `skeleton_counts` **重复**，而它恰是爆炸源。
+
+做法（JSON/JSONL）：**不再按 exact signature 切 partition，改每文件一个 partition**（显式包装
+key 的真表拆分保留），`build_schema_unit` 走 **fold 模式**（已实现，见待完成项 5）：
+
+| 原靠「多 unit」表达 | fold 折叠后无损保留于 |
+|---------------------|----------------------|
+| 每条记录精确形状 | `skeleton_counts`（top-50 形状 + 计数） |
+| 形状种类数 | `skeleton_count_B` |
+| 字段在/不在（可选性） | 每路径 `occurrence` |
+| 类型漂移 | `multi_type` + `dominant_ratio` |
+| **每个字段路径**（含稀有可选字段） | backbone = 折叠路径**并集** |
+
+唯一「丢」的是把每种精确字段共现组合实例化成独立 unit 的能力——而那恰是 2ᵏ 组合噪声本身
+（top 组合仍在 `skeleton_counts`）。真正多实体文件（数组里混 user+order）按**顶层 key 集合**
+粗聚类、K 很小，而非按 exact signature。
+
+**前置缺口**：要让「可选性」真正无损，`occurrence` 不能再是占位 `1.0`（现状），需落地真实
+出现率（= 待完成项 4 的 `optional_field_grouping`）。所以本条工作量 = 改 JSON/JSONL 分片策略
+（去签名聚类）+ 落地 occurrence，**而非加 cap**。
+
+#### 7.3 `profile_similarity` 修复 + 分块/LSH：O(n²) → 近线性
+
+核心思想：**绝大多数 entry 对不可能同义，别去比**。两层：
+
+**(a) 分块（blocking / canopy）**：给每 entry 算廉价离散 block key，只在同 key 块内两两比，
+开销从 n² 降到 Σ(块大小)²。block key 用粗化画像特征（重构后 value_profile 的现成字段）：
+```
+block_key = (dtype, len_band, dominant_pattern_class, dominant_script)
+  "13800000000" → (str, len11,   "D{11}",      -)      手机块
+  "a@b.com"      → (str, len6-15, "L+@L+.L+",  Latin)  邮箱块
+  "张三"         → (str, len1-4,  "C{n}",       Han)    中文名块
+```
+**召回兜底（多键分块）**：边界样本（len10 vs 11 落不同 band）会漏配 → 每 entry 挂多个 block
+key（按 len_band 与 pattern_class 各挂一次），任一键相撞即候选对。
+
+**(b) LSH（分块的概率化稳健版）**：`avg_char_dist` 7 桶向量 → **SimHash**（余弦敏感）；
+`top_patterns` 集合 → **MinHash**（Jaccard 敏感）；再 **banding**：任一段哈希相同即候选对，
+近似项高概率相撞、远的几乎不撞，候选对再用真实 `profile_similarity` 复核。
+
+**(c) 真实 `profile_similarity`（替占位的恒 0）**：
+```
+1. dtype 门:           不一致 → 0
+2. char_dist 分布距离: 7 桶向量余弦 / 1−JSD
+   —— avg_char_dist 现已 MECE、和恒为 1, 是合法概率分布, 此距离才有意义
+3. 长度重叠:           len_dist mean/std 接近度
+4. pattern 重叠:       top_patterns 两集合 Jaccard
+5. (可选) avg_scripts 直方图距离
+```
+关键：**喂进 block key 的粗特征要与打分特征同源**（都从同一份画像粗化），分块与打分逻辑自洽。
+
+**(d) 新流程与复杂度**：
+```
+每 entry 算 block key(s)                    O(n)
+按 key 分桶                                 O(n)
+每桶内真实 profile_similarity 跑 union-find   O(Σ b_i²), 桶小则近线性
+C(PII 类型)全局 union 不变
+```
+块有界（或 canopy + 上限保护）时整体近线性——**这时才有资格真正打开 B 证据**。
+
+#### 7.4 落地顺序（建议）
+
+| 步 | 动作 | 性质 | 收益 |
+|----|------|------|------|
+| ① **立即止血** | `vocab_table.py` 加 `_PROFILE_B_ENABLED=False` 护栏，关掉 7.1(b) 的 O(n²) 空转；Pass2 补进度日志 | 最小、最急；B 现恒 0，关掉**零行为变化** | 当前运行立即解锁、不再静默卡死 |
+| ② **治本去爆炸** | JSON/JSONL 改单文件 fold 分片（去签名聚类）+ 落地真实 occurrence | 结构性，改动面中 | unit 数回到 O(文件数)，字段无损（见 7.2） |
+| ③ **打开 B** | 修 `profile_similarity`（真实度量）+ 分块/LSH | 结构性，改动面大 | B 证据可用且跑得起（见 7.3） |
+
+> ① 与待完成项 6 残留方向 1（vocab 聚类 O(字段条目数)内存）同源；② 与待完成项 3.1 / 4 同源；
+> ③ 取代待完成项 2 的占位升级路径。**三步独立可分别落地，①最优先**。
 
 ---
 

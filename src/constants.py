@@ -27,12 +27,26 @@ SQL_KEYWORD_PATTERN = (
     r'update\s+.+\s+set|delete\s+from)\b'
 )
 
+# 强 SQL 结构标记 (DDL/DML): 命中即近乎确定为 SQL，权重高于 CSV，
+# 解决 "INSERT/CREATE 行以 ; 结尾被误当分号分隔 CSV" 的误判 (见 actually_sql.txt)
+SQL_STRONG_PATTERN = (
+    r'\b(create\s+table|insert\s+into|drop\s+table|alter\s+table|create\s+index)\b'
+)
+
 # 日志行模式
 LOG_PATTERN = (
     r'^\s*[\[\(]?\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}'
     r'|\b(INFO|WARN|ERROR|DEBUG|TRACE|FATAL)\b'
     r'|^\d{2}:\d{2}:\d{2}'
 )
+
+# 强日志信号: 行首时间戳 + 日志级别 双命中 → 近乎确定为日志，权重高于 CSV/JSON，
+# 解决 "时间戳里的逗号被当 CSV 列 / 行首 [ 被当 JSON" 的误判 (见 app_server.log)
+LOG_TS_PREFIX_PATTERN = (
+    r'^\s*[\[\(]?\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}'
+    r'|^\s*[\[\(]?\d{2}:\d{2}:\d{2}'
+)
+LOG_LEVEL_PATTERN = r'\b(INFO|WARN|WARNING|ERROR|DEBUG|TRACE|FATAL)\b'
 
 # 支持的格式
 STRUCTURED_FORMATS = {'json', 'jsonl', 'csv', 'tsv', 'sql', 'sqlite'}
