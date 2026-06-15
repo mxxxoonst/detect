@@ -1,0 +1,7 @@
+# 非 UTF-8 / 二进制测试样本：禁止 git 做行尾或编码归一化（否则 GBK/二进制字节会被损坏）
+# GBK 编码样本：标记为非文本，git 不做 EOL 转换
+test_data/samples/gbk_*            -text
+test_data/samples/noisy_bom.json  -text
+# 纯二进制样本
+test_data/samples/*.db            binary
+test_data/samples/*.bin           binary

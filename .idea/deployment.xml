@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData" autoUpload="Always" serverName="root@172.17.66.200:22 key" exclude=".svn;.cvs;.idea;.DS_Store;.git;.hg;*.hprof;*.pyc;.venv;__pycache__;*.pyc;*.pyo;.pytest_cache;.ruff_cache;.mypy_cache;" remoteFilesAllowedToDisappearOnAutoupload="false" showNewOnSourceInSync="false">
+    <serverData>
+      <paths name="root@172.17.66.200:22 key">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/data/header_parser/zlf/PII_detect/detect" local="$PROJECT_DIR$" />
+          </mappings>
+          <excludedPaths>
+            <excludedPath path="/data/header_parser/zlf/data_zipped" />
+            <excludedPath path="/data/header_parser/zlf/PII_detect/detect/.git" />
+            <excludedPath local="true" path="$PROJECT_DIR$/output" />
+            <excludedPath local="true" path="$PROJECT_DIR$/test_data/samples" />
+          </excludedPaths>
+        </serverdata>
+      </paths>
+    </serverData>
+    <option name="myAutoUpload" value="ALWAYS" />
+  </component>
+</project>
