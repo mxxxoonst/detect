@@ -23,7 +23,7 @@ def parse_json(path: str, encoding: str) -> Grade:
     raw = read_head_bytes(path)
     text = safe_decode(raw, encoding)
 
-    good, crashed, bytes_good = _ijson_count_items(path)
+    good, crashed, bytes_good, err_msg = _ijson_count_items(path)
 
     if good > 0:
         if not crashed:
@@ -56,6 +56,7 @@ def parse_json(path: str, encoding: str) -> Grade:
                 "good_items": good, "estimated_total": estimated_total,
             },
             n_form="partial_array",
+            n_detail={"kind": "partial_array", "reason": err_msg[:200], "offset": bytes_good},
             note=f"ijson partial: {good}/{estimated_total} items, I={I:.3f}",
         )
 
@@ -67,7 +68,7 @@ def _ijson_count_items(path: str) -> tuple:
     """用 ijson.items 流式读顶层数组，统计成功元素数和崩溃前消耗字节。
 
     Returns:
-        (good_count, crashed, bytes_at_last_good_item)
+        (good_count, crashed, bytes_at_last_good_item, err_msg)
         - good_count: 成功 yield 的元素数
         - crashed:    True 表示 ijson 中途抛异常
         - bytes_at_last_good_item: 最后一个成功元素 yield 后已读字节数
@@ -94,14 +95,14 @@ def _ijson_count_items(path: str) -> tuple:
                 for _item in ijson.items(tracker, "item"):
                     good += 1
                     last_good_pos = tracker.pos
-                return good, False, last_good_pos   # 无崩溃
+                return good, False, last_good_pos, ""   # 无崩溃
             except Exception as e:
                 log.debug("ijson 流式中途崩溃 %s: 已读 %d 项, %d 字节 (%s)",
                           path, good, last_good_pos, e)
-                return good, True, last_good_pos    # 崩溃前的计数
+                return good, True, last_good_pos, f"{type(e).__name__}: {e}"
     except OSError as e:
         log.warning("JSON 文件打开失败 %s: %s", path, e)
-        return 0, True, 0
+        return 0, True, 0, f"{type(e).__name__}: {e}"
 
 
 def parse_jsonl(path: str, encoding: str) -> Grade:
@@ -109,16 +110,20 @@ def parse_jsonl(path: str, encoding: str) -> Grade:
     try:
         good = 0
         bad = 0
+        bad_samples = []
         with open(path, "r", encoding=encoding, errors="replace") as f:
-            for line in f:
-                line = line.strip()
+            for lineno, raw_line in enumerate(f, 1):
+                line = raw_line.strip()
                 if not line:
                     continue
                 try:
                     json.loads(line)
                     good += 1
-                except json.JSONDecodeError:
+                except json.JSONDecodeError as e:
                     bad += 1
+                    if len(bad_samples) < 5:
+                        # 只存结构化诊断(错误串+行号+长度)，不落原始行内容(守 PII 红线)
+                        bad_samples.append({"lineno": lineno, "err": str(e)[:200], "len": len(line)})
         total = good + bad
         if total == 0:
             return Grade(tier=3, I=0.0, fmt="jsonl", encoding=encoding)
@@ -131,6 +136,7 @@ def parse_jsonl(path: str, encoding: str) -> Grade:
                          parsed={"type": "jsonl", "units": good})
         return Grade(tier=2, I=I, fmt="jsonl", encoding=encoding,
                      n_form="jsonl_parse_error",
+                     n_detail={"kind": "jsonl_parse_error", "bad_count": bad, "samples": bad_samples},
                      parsed={"type": "jsonl", "units": good, "bad_lines": bad})
     except Exception as e:
         log.warning("JSONL 解析失败 %s: %s", path, e)

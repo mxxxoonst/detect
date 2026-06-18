@@ -12,7 +12,7 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple, TypedDict
 # schema_partition.partition_file() 产出，build_schema_unit() 输入。
 class SchemaPartition(TypedDict):
     source_file: str                    # 文件绝对路径
-    format: str                         # json / jsonl / csv / tsv / sql / sqlite
+    format: str                         # json / jsonl / csv / tsv / sql / xlsx
     partition_id: str                   # 同文件多 schema 区分，如 "users" / "sig_a3f2c1b0"
     record_iter: Iterator[dict]         # ⚠ 惰性迭代器，只可消费一次
     noisy: bool                         # CSV 列数不稳定时为 True，据此跳过拓扑

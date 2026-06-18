@@ -12,6 +12,7 @@
             <excludedPath path="/data/header_parser/zlf/PII_detect/detect/.git" />
             <excludedPath local="true" path="$PROJECT_DIR$/output" />
             <excludedPath local="true" path="$PROJECT_DIR$/test_data/samples" />
+            <excludedPath local="true" path="$PROJECT_DIR$/resources" />
           </excludedPaths>
         </serverdata>
       </paths>

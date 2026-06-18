@@ -142,9 +142,16 @@ def _stream_grades(files: list, grades_path: Path, restart: bool) -> dict:
 
     total = len(files)
     new = 0
+    skipped_empty = 0
     for path in files:
         if path in done:
             continue
+        try:
+            if Path(path).stat().st_size == 0:
+                skipped_empty += 1
+                continue
+        except OSError:
+            pass
         fmt, enc, conf = sniff_file(path)
         grade = grade_parse(path, fmt, enc)
         line = _grade_summary(grade)
@@ -162,7 +169,8 @@ def _stream_grades(files: list, grades_path: Path, restart: bool) -> dict:
         if new % 500 == 0:
             log.info("  阶段1 进度: 新处理 %d / 共 %d (已跳过 %d)", new, total, len(done))
 
-    log.info("阶段1 完成: 新处理 %d, 跳过 %d, 累计 %d", new, len(done), new + len(done))
+    log.info("阶段1 完成: 新处理 %d, 跳过已存 %d, 跳过空文件 %d, 累计 %d",
+             new, len(done), skipped_empty, new + len(done))
     return {"counts": counts, "samples": samples, "errors": errors, "total": total}
 
 
@@ -446,6 +454,7 @@ def _grade_summary(grade):
         "error": grade.error,
         "n_form": grade.n_form,
         "n_struct": grade.n_struct,
+        "n_detail": grade.n_detail,
         "note": grade.note,
     }
 

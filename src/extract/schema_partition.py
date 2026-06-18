@@ -4,14 +4,13 @@
   JSON/JSONL : 显式包装 key 优先，兜底骨架签名聚类
   CSV/TSV    : 整文件单 partition，检测列稳定性
   SQL 文本   : 按 CREATE TABLE / INSERT INTO 的表名分片
-  SQLite     : sqlite_master 每张 user table 一个 partition
+  xlsx       : openpyxl 只读，每 sheet 一个 partition
 """
 
 import csv
 import hashlib
 import json
 import re
-import sqlite3
 from collections import defaultdict
 from itertools import islice
 from statistics import stdev
@@ -54,8 +53,8 @@ def partition_file(grade: Grade) -> Tuple[List[SchemaPartition], PartitionStats]
         parts, method = _partition_csv(grade.path, grade.encoding, fmt)
     elif fmt == "sql":
         parts, method = _partition_sql(grade.path, grade.encoding)
-    elif fmt == "sqlite":
-        parts, method = _partition_sqlite(grade)
+    elif fmt == "xlsx":
+        parts, method = _partition_xlsx(grade)
     else:
         parts, method = [], "unknown"
 
@@ -404,39 +403,52 @@ def _collect_sql_rows_into(values_str: str, cols: list, bucket: list) -> None:
             continue
 
 
-# ── SQLite ────────────────────────────────────────────────────────────────────
+# ── xlsx ──────────────────────────────────────────────────────────────────────
 
-def _partition_sqlite(grade: Grade) -> Tuple[List[SchemaPartition], str]:
-    """sqlite3 只读，每张 user table 一个 partition，立即实例化行数据。"""
+def _partition_xlsx(grade: Grade) -> Tuple[List[SchemaPartition], str]:
+    """openpyxl 只读，每 sheet 一个 partition；首行作表头，行 zip 成 dict 采样。"""
+    try:
+        import openpyxl
+    except ImportError as e:
+        log.warning("openpyxl 未安装, xlsx 分片跳过 %s: %s", grade.path, e)
+        return [], "sheet_name"
+
     parts = []
     try:
-        uri = f"file:{grade.path}?mode=ro"
-        conn = sqlite3.connect(uri, uri=True)
-
-        tables = [
-            row[0]
-            for row in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
-        ]
-
-        for tname in tables:
-            rows = []
-            try:
-                cur = conn.execute(f"SELECT * FROM [{tname}] LIMIT {SAMPLE_PER_FILE}")
-                col_names = [d[0] for d in cur.description]
-                rows = [dict(zip(col_names, row)) for row in cur]
-            except Exception as e:
-                log.warning("SQLite 表 %s SELECT 失败 %s: %s", tname, grade.path, e)
-
+        wb = openpyxl.load_workbook(grade.path, read_only=True, data_only=True)
+        for ws in wb.worksheets:
+            rows = _xlsx_sheet_rows(ws)
             if rows:
-                parts.append(_make_partition(grade.path, "sqlite", tname, iter(rows)))
-
-        conn.close()
+                parts.append(_make_partition(grade.path, "xlsx", ws.title, iter(rows)))
+        wb.close()
     except Exception as e:
-        log.warning("SQLite 打开/读表名失败 %s: %s", grade.path, e)
+        log.warning("xlsx 打开/读 sheet 失败 %s: %s", grade.path, e)
 
-    return parts, "table_name"
+    return parts, "sheet_name"
+
+
+def _xlsx_sheet_rows(ws) -> list:
+    """首行作表头，后续行 zip 成 dict，跳过全空行，采样到 SAMPLE_PER_FILE。"""
+    rows: list = []
+    headers = None
+    for i, row in enumerate(ws.iter_rows(values_only=True)):
+        if i == 0:
+            headers = [
+                str(c) if c is not None else f"col_{j}"
+                for j, c in enumerate(row)
+            ]
+            continue
+        if headers is None:
+            continue
+        rec = {
+            (headers[j] if j < len(headers) else f"col_{j}"): val
+            for j, val in enumerate(row)
+        }
+        if any(v is not None and str(v).strip() != "" for v in rec.values()):
+            rows.append(rec)
+        if len(rows) >= SAMPLE_PER_FILE:
+            break
+    return rows
 
 
 # ── 通用工厂 ──────────────────────────────────────────────────────────────────

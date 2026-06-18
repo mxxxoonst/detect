@@ -1,6 +1,7 @@
 """CSV / TSV 解析器: strict(列一致) + tolerant(skip bad lines)."""
 
 import csv
+from collections import Counter
 from statistics import stdev
 
 from src.parse.grade import Grade
@@ -47,6 +48,8 @@ def _parse_delimited(path: str, encoding: str, sep: str, fmt: str) -> Grade:
         log.debug("%s 解析中断但已读 %d 行 %s: %s", fmt.upper(), good_rows, path, e)
         return Grade(tier=2, I=I, fmt=fmt, encoding=encoding,
                      n_struct=_column_drift(col_counts) if col_counts else 0.0,
+                     n_detail={"kind": "read_interrupted", "reason": str(e)[:200],
+                               "good_rows": good_rows, "col_hist": _col_hist(col_counts)},
                      parsed={"type": fmt, "headers": headers, "good_rows": good_rows})
 
     if total_rows == 0:
@@ -61,14 +64,22 @@ def _parse_delimited(path: str, encoding: str, sep: str, fmt: str) -> Grade:
     # tolerant: 列数有漂移
     I = good_rows / total_rows
     drift = _column_drift(col_counts)
+    modal = Counter(col_counts).most_common(1)[0][0] if col_counts else 0
+    header_cols = col_counts[0] if col_counts else 0
+    modal_frac = (col_counts.count(modal) / len(col_counts)) if col_counts else 0.0
+    # 列名坍塌: 表头列数 != 数据众数列数, 且数据行多数自洽 (value 正常分列)
+    kind = "header_col_mismatch" if (header_cols != modal and modal_frac >= 0.7) else "col_drift"
     return Grade(tier=2, I=I, fmt=fmt, encoding=encoding,
                  n_struct=drift,
+                 n_detail={"kind": kind, "drift": round(drift, 4),
+                           "modal_cols": modal, "header_cols": header_cols,
+                           "col_hist": _col_hist(col_counts)},
                  parsed={"type": fmt, "headers": headers, "good_rows": good_rows, "total_rows": total_rows})
 
 
 def _sniff_delimiter(path: str, encoding: str) -> str:
     """嗅探 CSV 分隔符: 在 , ; | 中选列数最稳定的."""
-    candidates = [",", ";", "|"]
+    candidates = [",", ";", "|",":"]
     best_sep = ","
     best_stability = float("inf")
     lines_read = 0
@@ -93,6 +104,11 @@ def _sniff_delimiter(path: str, encoding: str) -> str:
                 best_stability = sd
                 best_sep = sep
     return best_sep
+
+
+def _col_hist(col_counts: list) -> dict:
+    """列数分布直方图 {列数: 行数}，作为列漂移的结构化噪声签名（不含原始值）。"""
+    return {str(k): v for k, v in Counter(col_counts).most_common()}
 
 
 def _column_drift(col_counts: list) -> float:

@@ -23,6 +23,7 @@ class Grade:
     error: Optional[str] = None
     n_form: Optional[str] = None       # JSON 格式错误分类
     n_struct: Optional[float] = None   # CSV 列漂移度量
+    n_detail: Optional[dict] = None    # tier2 失败细节(错误串/偏移/坏行长度/列分布)，供噪声分布聚类；结构化、不落原始内容
     note: Optional[str] = None
     encoding: str = "utf-8"
     path: str = ""
@@ -42,6 +43,7 @@ def grade_from_summary(d: dict) -> Grade:
         path=d.get("path", ""),
         n_form=d.get("n_form"),
         n_struct=d.get("n_struct"),
+        n_detail=d.get("n_detail"),
         note=d.get("note"),
         error=d.get("error"),
     )
@@ -59,23 +61,23 @@ def grade_parse(path: str, real_format: str, enc: str) -> Grade:
     from src.parse.json_parser import parse_json, parse_jsonl
     from src.parse.csv_parser import parse_csv, parse_tsv
     from src.parse.sql_parser import parse_sql_text
-    from src.parse.sqlite_parser import parse_sqlite
+    from src.parse.xlsx_parser import parse_xlsx
 
     fmt = real_format
 
     grade = _route(fmt, path, enc,
                    parse_json, parse_jsonl, parse_csv, parse_tsv,
-                   parse_sql_text, parse_sqlite)
+                   parse_sql_text, parse_xlsx)
     log.debug("grade_parse %s: fmt=%s → tier=%s I=%s error=%s",
               path, fmt, grade.tier, grade.I, grade.error)
     return grade
 
 
 def _route(fmt, path, enc, parse_json, parse_jsonl, parse_csv, parse_tsv,
-           parse_sql_text, parse_sqlite) -> Grade:
+           parse_sql_text, parse_xlsx) -> Grade:
     """按格式分发到具体解析器，统一回填 path。"""
-    if fmt == "sqlite":
-        grade = parse_sqlite(path)
+    if fmt == "xlsx":
+        grade = parse_xlsx(path)
         grade.path = path
         return grade
 
@@ -107,6 +109,6 @@ def _route(fmt, path, enc, parse_json, parse_jsonl, parse_csv, parse_tsv,
         return Grade(tier="free_text", I=None, fmt="free_text", encoding=enc, path=path,
                      note="自由文本, 进 PII 自举(阶段2)/真实测试集, 不做结构解析")
 
-    # binary_unknown / db_nonsqlite / empty
+    # binary_unknown / empty / 其他不可解析
     return Grade(tier=3, I=0.0, fmt=fmt, encoding=enc, path=path,
                  note=f"格式 '{fmt}' 不可解析")

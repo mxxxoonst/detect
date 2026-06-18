@@ -37,16 +37,21 @@ corpus_root (目录/单文件)
 
 ### 2.1 `sniffer.py` · `sniff_file(path) → (real_format, encoding, confidence)`
 
-单文件真实格式判定，**内容优先于扩展名**。流程（短路顺序）：
+单文件真实格式判定。**设计取舍**：真实语料中 json/csv/jsonl/sql/tsv/xlsx 等结构化文件 ~99% 后缀与内容一致（噪声留给阶段1 容错解析暴露，不在嗅探期纠格式），故对这些扩展名**直接信任**；仅 `.txt`/`.log`/无扩展名等无强先验文件才做内容投票。流程（短路顺序）：
 
-1. 读前 16 字节，命中 `SQLITE_MAGIC`（`b"SQLite format 3\x00"`）→ `("sqlite","binary",1.0)`。
-2. 读前 1KB，`is_binary()` 判二进制 → `.db` 扩展名给 `db_nonsqlite`(0.8)，否则 `binary_unknown`(0.6)。
-3. 文本类：读 64KB 头部（`SNIFF_HEAD_BYTES`）→ chardet 探编码 → `safe_decode(errors="replace")` → 取前 20 非空行（`SNIFF_LINES`）。
-4. 无非空行 → `("empty", enc, 1.0)`。
-5. `.sql` 扩展名 + 命中 `create table|insert into|drop table` → `("sql", enc, 0.95)`（弱先验加速）。
-6. 否则多候选加权投票 `vote_format()`，取最高分；`conf < ACCEPT_THRESHOLD(0.5)` → 归 `free_text`。
+1. `file_size==0` → `("empty","utf-8",1.0)`。
+2. 扩展名命中 `_TRUSTED_EXT`（json/jsonl/ndjson/csv/tsv/sql/xlsx）→ 直接返回该格式，conf=1.0。
+   - `xlsx` 为二进制：`("xlsx","binary",1.0)`，不探编码。
+   - 其余文本类：`_detect_text_encoding()` 先看 BOM（UTF-16/32），否则 chardet → 返回 `(fmt, enc, 1.0)`。
+3. 其余扩展名走 `_sniff_by_content()`：
+   - 读前 1KB，`is_binary()`（无 BOM 时）判二进制 → `("binary_unknown","binary",0.6)`。
+   - 读 64KB 头部（`SNIFF_HEAD_BYTES`）→ BOM/chardet 探编码 → `safe_decode(errors="replace")` → 取前 20 非空行（`SNIFF_LINES`）。
+   - 无非空行 → `("empty", enc, 1.0)`。
+   - 多候选加权投票 `vote_format()`，取最高分；`conf < ACCEPT_THRESHOLD(0.5)` → 归 `free_text`。
 
-`real_format` 取值域：`json|jsonl|csv|tsv|sql|sqlite|log|free_text|db_nonsqlite|binary_unknown|empty`。
+`real_format` 取值域：`json|jsonl|csv|tsv|sql|xlsx|log|free_text|binary_unknown|empty`。
+
+> `.db`/`.sqlite` 二进制路径已移除（真实样例太少）；若遇到 `.db` 文件会落到内容投票路径并多半判 `binary_unknown`。
 
 ### 2.2 `voting.py` · `vote_format(lines, full_text) → {fmt: score}`
 
@@ -93,7 +98,7 @@ corpus_root (目录/单文件)
 | `n_struct` | CSV 列漂移度量（变异系数） |
 | `note` | 备注 |
 
-`grade_parse(path, real_format, enc)`：按 `real_format` 路由到对应 parser（延迟 import 避免循环依赖），统一回填 `path`。`log`/`free_text` 直接构造弱结构 Grade；`binary_unknown`/`db_nonsqlite`/`empty` → tier3。
+`grade_parse(path, real_format, enc)`：按 `real_format` 路由到对应 parser（延迟 import 避免循环依赖），统一回填 `path`。`log`/`free_text` 直接构造弱结构 Grade；`binary_unknown`/`empty` 及其他不可解析格式 → tier3。
 
 ### 3.2 各 parser 策略
 
@@ -102,8 +107,8 @@ corpus_root (目录/单文件)
 | `json_parser.py` | `parse_json` | ijson 流式读全部元素，无崩溃 → tier1 | 崩溃前部分元素 → 按字节比例估总量；good==0 → json5 容错（注释/单引号/尾逗号） | `good/estimated_total` |
 | | `parse_jsonl` | 逐行 `json.loads` 统计 good/bad | 坏行跳过 | `good/(good+bad)` |
 | `csv_parser.py` | `parse_csv`/`parse_tsv` | 嗅探分隔符（`,;\|`），列数全一致 → tier1 | 列数漂移 → tier2 记 `n_struct` | `good_rows/total_rows` |
-| `sql_parser.py` | `parse_sql_text` | 读头 64KB，按 `;` 分语句，regex 匹配 CREATE/INSERT | 引号不配对计数入 note | `complete/total statements` |
-| `sqlite_parser.py` | `parse_sqlite` | `sqlite3.connect("file:path?mode=ro", uri=True)` 读 `sqlite_master`；有表 → tier1 | 无表 → tier3 | 1.0 / 0.0 |
+| `sql_parser.py` | `parse_sql_text` | 读头 64KB，按 `;` 分语句，regex 匹配 CREATE/INSERT；`_detect_sql_dialect` 标方言 | 引号不配对计数入 note | `complete/total statements` |
+| `xlsx_parser.py` | `parse_xlsx` | openpyxl `read_only` 读各 sheet 表头；有 sheet → tier1 | openpyxl 缺失/打开失败 → tier3 | 1.0 / 0.0 |
 
 - **I(x)** 是统一标尺但**每种格式的定义、精度、tier 边界并不一致**——详见 §3.3 横向对比。
 - JSON 错误分类 `_classify_json_error` → `n_form`，供下游统计噪声类型分布。
@@ -139,7 +144,7 @@ corpus_root (目录/单文件)
   故 **I 在所有非空路径恒 ≡ 1.0**（含 tier2 分支）。CSV 的可恢复性梯度**不在 I 里**，而在
   `n_struct`（列漂移变异系数 `_column_drift`）。
 
-- **SQLite（`sqlite_parser.py:24`）**：二元 `I∈{0,1}`，无 tier2。
+- **xlsx（`xlsx_parser.py`）**：二元 `I∈{0,1}`，无 tier2——有 sheet → 1.0/tier1，openpyxl 缺失或打开失败 → 0.0/tier3。
 
 #### 三大族 + 对比表
 
@@ -150,11 +155,11 @@ corpus_root (目录/单文件)
 | JSONL | `good/(good+bad)` | 本身 | 整文件 | **精确** | I**==1.0** | I |
 | SQL | `complete/total` | 本身 | 64KB 头 | 精确* | I**==1.0** | I（*=DDL 纯度，非解析成功率）|
 | CSV/TSV | `good_rows/total_rows` | **恒≡1.0** | 整文件 | 退化 | 列零漂移 | **`n_struct`**（非 I）|
-| SQLite | 二元 | `{0,1}` | schema | 二元 | 有表 | 二元 |
+| xlsx | 二元 | `{0,1}` | sheet | 二元 | 有 sheet | 二元 |
 
 1. **字节比例外推族**（JSON 两路径）：I≈消耗字节/总字节，分母是估算值 → 用 0.99 容差。
 2. **精确计数比族**（JSONL、SQL）：分母精确 → 严格 ==1.0。
-3. **退化/旁路族**（CSV 的 I 恒 1.0、梯度在 `n_struct`；SQLite 二元）。
+3. **退化/旁路族**（CSV 的 I 恒 1.0、梯度在 `n_struct`；xlsx 二元）。
 
 > 由此 §3.2 那种"I≥0.99→tier1"的统一说法仅适用于 JSON 两路径；JSONL/SQL 是 ==1.0，CSV 看列漂移，
 > SQLite 看有无表。下游若按 `I` 字段统一排序可恢复性，需注意 CSV/SQL 的语义偏差（见 §12.6/§12.7）。
@@ -367,7 +372,8 @@ Pass2 **卡死的直接原因**。真实多维加权 + 分块/LSH 近线性化 +
 | `extract` | `grades.jsonl` + `schema_units.jsonl` | `extract_report.json` + `vocab_table.json` | `extract.log` |
 | `pipeline` | `grades.jsonl` + `schema_units.jsonl` | `pipeline_report.json` + `vocab_table.json` | `pipeline.log` |
 
-- **`grades.jsonl`**：阶段1 每行一文件 `{path, fmt, encoding, tier, I, conf, n_form, n_struct, note, error}`。
+- **`grades.jsonl`**：阶段1 每行一文件 `{path, fmt, encoding, tier, I, conf, n_form, n_struct, n_detail, note, error}`。
+  - `n_detail`：tier2 失败的**结构化**诊断（供噪声分布聚类），按格式不同：JSON `{kind:partial_array, reason, offset}`、JSONL `{kind:jsonl_parse_error, bad_count, samples:[{lineno,err,len}]}`、CSV `{kind:col_drift|header_col_mismatch|read_interrupted, drift, modal_cols, header_cols, col_hist}`、SQL `{dialect, dialect_status, dialect_scores}`（所有 tier 都有；`dialect_status∈{confident,ambiguous,weak,unknown}`，后三者供人工排查）+ tier2 追加 `{kind:sql_incomplete, complete, total, unclosed_quotes}`。**只存错误串/偏移/长度/列分布，不落原始内容（守 PII 红线）**。
 - **`schema_units.jsonl`**：阶段2 每行一个 SchemaUnit（**取代旧的整文件 `schema_units.json`**，流式追加、崩溃不损坏）。
 - `*_report.json` / `vocab_table.json` 是小体量汇总，结束时一次性写出。
 - 续跑：保留中间产物重跑同命令即自动接续；`--restart` 删除中间产物从头来。

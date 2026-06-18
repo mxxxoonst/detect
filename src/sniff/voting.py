@@ -4,12 +4,12 @@ import re
 from typing import Dict, List
 
 from src.constants import (
-    SQL_KEYWORD_PATTERN, SQL_STRONG_PATTERN,
+    SQL_KEYWORD_PATTERN, SQL_STMT_START_PATTERN,
     LOG_PATTERN, LOG_TS_PREFIX_PATTERN, LOG_LEVEL_PATTERN,
 )
 from src.utils.text_utils import (
     balanced_brackets,
-    column_stability,
+    column_profile,
     first_line_looks_like_header,
     has_sentence_punctuation,
     no_strong_structure_signal,
@@ -46,11 +46,15 @@ def vote_format(lines: List[str], full_text: str) -> Dict[str, float]:
     _vote_delimited(lines, scores, n)
 
     # ── SQL: txt 里夹 SQL 语句 ──
-    # 强 DDL/DML 标记 (CREATE TABLE / INSERT INTO ...) → 0.95，压过 CSV 的 0.9；
-    # 否则弱 SQL 关键词 (SELECT...FROM 等) → 0.7
-    if re.search(SQL_STRONG_PATTERN, full_text, re.IGNORECASE):
+    # 强信号"行锚定": 关键词须起一行(任意行)且文件含 ; 结尾语句 → 0.95;
+    # 区别于 CSV value 里埋的 'insert into' (不在行首 → 不触发强信号)。
+    strong_stmt_lines = sum(
+        1 for ln in lines if re.match(SQL_STMT_START_PATTERN, ln, re.IGNORECASE)
+    )
+    semicolon_lines = sum(1 for ln in lines if ln.endswith(";"))
+    if strong_stmt_lines >= 1 and semicolon_lines >= 1:
         scores["sql"] += 0.95
-    elif re.search(SQL_KEYWORD_PATTERN, full_text, re.IGNORECASE):
+    elif strong_stmt_lines >= 1 or re.search(SQL_KEYWORD_PATTERN, full_text, re.IGNORECASE):
         scores["sql"] += 0.7
 
     # ── 日志行: 时间戳/级别模式 ──
@@ -75,10 +79,11 @@ def vote_format(lines: List[str], full_text: str) -> Dict[str, float]:
 
 
 def _vote_delimited(lines: List[str], scores: Dict[str, float], n: int):
-    """对 CSV/TSV/管道分隔符做投票."""
-    for sep, fmt in [("\t", "tsv"), (",", "csv"), (";", "csv"), ("|", "csv")]:
-        first_ncols, col_sd, _col_counts = column_stability(lines, sep)
-        if first_ncols >= 2 and col_sd < 0.5:
+    """对 CSV/TSV/管道/冒号分隔符做投票 (众数列稳定性, 容忍少数漂移行)."""
+    for sep, fmt in [("\t", "tsv"), (",", "csv"), (";", "csv"), ("|", "csv"), (":", "csv")]:
+        modal_cols, modal_frac, _ = column_profile(lines, sep)
+        # 众数列数≥2 且多数行命中众数 → 分隔结构 (无表头 CSV、个别 value 内嵌分隔符均不掉票)
+        if modal_cols >= 2 and modal_frac >= 0.7:
             scores[fmt] += 0.8
             if first_line_looks_like_header(lines[0]):
                 scores[fmt] += 0.1

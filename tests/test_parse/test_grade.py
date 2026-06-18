@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from src.parse.grade import grade_parse
 
 
@@ -23,14 +25,6 @@ def test_grade_csv_tier1(samples_dir):
     assert grade.tier == 1
     assert grade.I == 1.0
     assert grade.fmt == "csv"
-
-
-def test_grade_sqlite_tier1(samples_dir):
-    path = _p(samples_dir, "clean_users.db")
-    grade = grade_parse(path, "sqlite", "binary")
-    assert grade.tier == 1
-    assert grade.I == 1.0
-    assert grade.fmt == "sqlite"
 
 
 def test_grade_free_text(samples_dir):
@@ -63,3 +57,48 @@ def test_grade_csv_tier2_drift(samples_dir):
     path = _p(samples_dir, "noisy_column_drift.csv")
     grade = grade_parse(path, "free_text", "utf-8")
     assert grade.tier in ("free_text", 2)
+
+
+def test_grade_xlsx_tier1(samples_dir):
+    pytest.importorskip("openpyxl")
+    path = _p(samples_dir, "clean_users.xlsx")
+    grade = grade_parse(path, "xlsx", "binary")
+    assert grade.tier == 1
+    assert grade.I == 1.0
+    assert grade.fmt == "xlsx"
+
+
+def test_grade_sql_dialect_tagged(samples_dir):
+    """C0: SQL 文件 n_detail 始终带 dialect 标 (tier1 也有)。"""
+    path = _p(samples_dir, "clean_schema.sql")
+    grade = grade_parse(path, "sql", "utf-8")
+    assert grade.n_detail is not None
+    assert grade.n_detail["dialect"] == "sqlite"          # AUTOINCREMENT 标记
+    assert grade.n_detail["dialect_status"] == "confident"
+
+
+def test_grade_csv_header_collapse(make_temp_file):
+    """表头塌成一列 + 数据正常分列 → tier2, n_detail.kind=header_col_mismatch (列名坍塌)。"""
+    content = '"id,name,phone"\n1,Alice,13800000001\n2,Bob,13900000002\n3,Carol,13700000003\n'
+    path = make_temp_file("header_collapse.csv", content)
+    grade = grade_parse(path, "csv", "utf-8")
+    assert grade.tier == 2
+    assert grade.n_detail["kind"] == "header_col_mismatch"
+    assert grade.n_detail["header_cols"] == 1
+
+
+def test_detect_sql_dialect_statuses():
+    """C0: 四种 dialect_status 的判定。"""
+    from src.parse.sql_parser import _detect_sql_dialect
+
+    mysql = _detect_sql_dialect("CREATE TABLE `t` (id INT AUTO_INCREMENT) ENGINE=InnoDB;")
+    assert mysql["dialect"] == "mysql" and mysql["dialect_status"] == "confident"
+
+    pg = _detect_sql_dialect("COPY public.users (id) FROM stdin;\n1\n\\.\n")
+    assert pg["dialect"] == "postgres" and pg["dialect_status"] == "confident"
+
+    ansi = _detect_sql_dialect("CREATE TABLE t (id INT); INSERT INTO t VALUES (1);")
+    assert ansi["dialect"] == "ansi" and ansi["dialect_status"] == "unknown"
+
+    amb = _detect_sql_dialect("SELECT `a`, [b] FROM t;")    # mysql 1 vs tsql 1
+    assert amb["dialect_status"] == "ambiguous"

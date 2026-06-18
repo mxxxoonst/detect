@@ -6,7 +6,6 @@
 import argparse
 import json
 import random
-import sqlite3
 import sys
 from pathlib import Path
 
@@ -164,6 +163,28 @@ def gen_csv_tier2(out: Path):
     write_text(out / "noisy_column_drift.csv", "\n".join(lines))
 
 
+def gen_csv_utf16(out: Path):
+    """UTF-16 (带 BOM) CSV: 验证 BOM 文本不被误判二进制 (CTARS_BF 场景)。"""
+    records = [make_user_record(i) for i in range(15)]
+    headers = list(records[0].keys())
+    lines = [",".join(headers)]
+    for r in records:
+        lines.append(",".join(str(r[h]) for h in headers))
+    write_bytes(out / "utf16_users.csv", "\n".join(lines).encode("utf-16"))
+
+
+def gen_csv_headerless_noisy(out: Path):
+    """无表头 CSV, 约 1/4 行因 value 内嵌逗号列数漂移: 验证众数列稳定性 (Yatra_BF 场景)。"""
+    rows = []
+    for i in range(20):
+        r = make_user_record(i)
+        if i % 4 == 0:
+            rows.append(f"{r['id']},{r['name']},{r['phone']},a,b,c")   # 多 2 列
+        else:
+            rows.append(f"{r['id']},{r['name']},{r['phone']},{r['address']}")
+    write_text(out / "headerless_noisy.csv", "\n".join(rows))
+
+
 def gen_sql_tier1(out: Path):
     """干净 SQL 文件: CREATE TABLE + INSERT."""
     sql = """-- 用户表
@@ -211,61 +232,31 @@ INSERT INTO products (id, name, price) VALUES (4, 'Doohickey', 39.99);
     write_text(out / "noisy_truncated.sql", sql)
 
 
-def gen_sqlite_db(out: Path):
-    """生成 SQLite .db 文件."""
-    path = str(out / "clean_users.db")
-    conn = sqlite3.connect(path)
+def gen_xlsx_tier1(out: Path):
+    """干净 xlsx: 多 sheet (users / orders), 首行表头。需要 openpyxl。"""
+    import openpyxl
 
-    conn.execute("""CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY,
-        name TEXT,
-        gender TEXT,
-        age INTEGER,
-        phone TEXT,
-        email TEXT,
-        id_card TEXT,
-        address TEXT,
-        province TEXT,
-        score REAL,
-        created_at TEXT
-    )""")
-
-    conn.execute("""CREATE TABLE IF NOT EXISTS orders (
-        id INTEGER PRIMARY KEY,
-        user_id INTEGER,
-        product TEXT,
-        amount REAL,
-        order_date TEXT,
-        FOREIGN KEY(user_id) REFERENCES users(id)
-    )""")
-
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id)")
-
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "users"
     records = [make_user_record(i) for i in range(20)]
+    headers = list(records[0].keys())
+    ws.append(headers)
     for r in records:
-        conn.execute(
-            "INSERT INTO users VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-            (r["id"], r["name"], r["gender"], r["age"], r["phone"],
-             r["email"], r["id_card"], r["address"], r["province"],
-             r["score"], r["created_at"])
-        )
+        ws.append([r[h] for h in headers])
 
+    ws2 = wb.create_sheet("orders")
+    order_headers = ["id", "user_id", "product", "amount", "order_date"]
+    ws2.append(order_headers)
     products = ["笔记本电脑", "手机", "键盘", "鼠标", "显示器"]
-    for i in range(30):
-        conn.execute(
-            "INSERT INTO orders VALUES (?,?,?,?,?)",
-            (i+1, random.randint(1,20), random.choice(products),
-             round(random.uniform(9.9, 9999.0), 2),
-             f"2024-{random.randint(1,12):02d}-{random.randint(1,28):02d}")
-        )
+    for i in range(15):
+        ws2.append([
+            i + 1, random.randint(1, 20), random.choice(products),
+            round(random.uniform(9.9, 9999.0), 2),
+            f"2024-{random.randint(1, 12):02d}-{random.randint(1, 28):02d}",
+        ])
 
-    conn.commit()
-    conn.close()
-
-
-def gen_fake_db(out: Path):
-    """伪装 .db 文件 (非 SQLite)."""
-    write_bytes(out / "corrupted.db", b"\x00\x01\x02\x03" * 100 + random.Random(42).randbytes(200))
+    wb.save(str(out / "clean_users.xlsx"))
 
 
 def gen_log_files(out: Path):
@@ -341,10 +332,11 @@ GENERATORS = [
     ("csv_tier1", gen_csv_tier1),
     ("csv_gbk", gen_csv_gbk),
     ("csv_tier2", gen_csv_tier2),
+    ("csv_utf16", gen_csv_utf16),
+    ("csv_headerless_noisy", gen_csv_headerless_noisy),
     ("sql_tier1", gen_sql_tier1),
     ("sql_tier2", gen_sql_tier2),
-    ("sqlite_db", gen_sqlite_db),
-    ("fake_db", gen_fake_db),
+    ("xlsx_tier1", gen_xlsx_tier1),
     ("log_files", gen_log_files),
     ("free_text", gen_free_text),
     ("empty_files", gen_empty_files),

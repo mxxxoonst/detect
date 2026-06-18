@@ -1,6 +1,5 @@
 SNIFF_HEAD_BYTES = 65536      # 嗅探读 64KB 头部
 SNIFF_LINES = 20              # txt 投票读前 20 行
-SQLITE_MAGIC = b"SQLite format 3\x00"   # 16 字节 SQLite 魔数
 ACCEPT_THRESHOLD = 0.5        # 投票分数阈值, 低于视为 free_text
 LOW_CONF_THRESHOLD = 0.7      # 低置信抽检阈值
 SAMPLE_PER_FILE = 1000        # 阶段2每文件抽样 record 数
@@ -33,6 +32,12 @@ SQL_STRONG_PATTERN = (
     r'\b(create\s+table|insert\s+into|drop\s+table|alter\s+table|create\s+index)\b'
 )
 
+# 行首 SQL 语句关键词: 嗅探投票"行锚定"用 (re.match on stripped line),
+# 区别于 value 里埋的关键词 (避免 CSV 某列含 'insert into' 被误判 SQL)
+SQL_STMT_START_PATTERN = (
+    r'(create\s+table|insert\s+into|drop\s+table|alter\s+table|create\s+index)'
+)
+
 # 日志行模式
 LOG_PATTERN = (
     r'^\s*[\[\(]?\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}'
@@ -49,6 +54,6 @@ LOG_TS_PREFIX_PATTERN = (
 LOG_LEVEL_PATTERN = r'\b(INFO|WARN|WARNING|ERROR|DEBUG|TRACE|FATAL)\b'
 
 # 支持的格式
-STRUCTURED_FORMATS = {'json', 'jsonl', 'csv', 'tsv', 'sql', 'sqlite'}
+STRUCTURED_FORMATS = {'json', 'jsonl', 'csv', 'tsv', 'sql', 'xlsx'}
 UNSTRUCTURED_FORMATS = {'log', 'free_text'}
-BINARY_FORMATS = {'db_nonsqlite', 'binary_unknown'}
+BINARY_FORMATS = {'binary_unknown'}

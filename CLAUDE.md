@@ -2,8 +2,8 @@
 
 ## 项目说明
 
-多源异构文件的**数据预处理与信息抽取流水线**：从混合格式文件（JSON/CSV/TSV/SQL/SQLite/TXT/日志）中
-嗅探真实格式、容错解析，并提取五类结构信息及 PII 种子。三阶段管线：
+多源异构文件的**数据预处理与信息抽取流水线**：从混合格式文件（JSON/CSV/TSV/SQL/XLSX/TXT/日志）中
+按后缀路由 / 嗅探 .txt 真实格式、容错解析，并提取五类结构信息及 PII 种子。三阶段管线：
 
 ```
 corpus_root → [阶段0 嗅探 sniff] → [阶段1 分级解析 parse] → [阶段2 Schema 提取 extract]
@@ -24,12 +24,11 @@ corpus_root → [阶段0 嗅探 sniff] → [阶段1 分级解析 parse] → [阶
     `ssh root@172.17.66.200 "cd data/header_parser/zlf/PII_detect/detect/ && uv run python <脚本>"`
   - 处理 GB 数据**优先用小样本调试**，别一上来跑全量。
   - 本地仅用于编辑代码、读 `test_data/samples/` 小样本、跑单元测试逻辑（不依赖远程数据的部分）。
-- **流式/抽样**：禁止整文件 load，一律流式读或只读头部（JSON 大数组用 ijson，JSONL 逐行，SQLite 每表 `LIMIT SAMPLE_PER_FILE`）
-- **编码混合**：GBK/UTF-8 混存，chardet 探编码，`errors='replace'` 解码；分片阶段忠实使用 `grade.encoding`
-- **扩展名不可信**：格式判据是内容嗅探而非扩展名，扩展名仅作弱先验
+- **流式/抽样**：禁止整文件 load，一律流式读或只读头部（JSON 大数组用 ijson，JSONL 逐行，CSV/xlsx 每文件 `LIMIT SAMPLE_PER_FILE`）
+- **编码混合**：GBK/UTF-8 混存，chardet 探编码，`errors='replace'` 解码；UTF-16/32 先靠 BOM（`detect_bom`）识别编码再判二进制；分片阶段忠实使用 `grade.encoding`
+- **嗅探只管 .txt**：真实语料 json/csv/jsonl/sql/tsv/xlsx 等结构化文件 ~99% 后缀与内容一致，故 `sniff_file()` **对这些扩展名直接信任**（噪声交给阶段1 容错解析暴露，不在嗅探期纠格式）；仅 `.txt`/`.log`/无扩展名走 `vote_format()` 内容投票路由。`.db`/`.sqlite` 不再特殊处理（真实样例太少，已移除）。
 - **禁止持久化 PII 原值（默认）**：value 画像只存统计摘要（长度分布、字符宏类分布、脚本直方图、模式模板），默认不存原始值。
   **唯一例外**：`extract`/`pipeline` 显式加 `--keep-samples` 才按 pattern 去重保留 ≤5 个样本（owner 授权的调试/下游用途）；`--mask-samples` 进一步脱敏（保留分隔符与长度、内容字符打码）。`profile_value()` 永不持有原值，样本仅在 `aggregate_profiles()` 显式开启时落地。
-- **SQLite 独立路径**：`.db` 走 sqlite3 二进制路径，只读 URI（`file:path?mode=ro`），不可文本解析
 
 ## 环境与依赖
 
@@ -85,8 +84,8 @@ detect/
 │   │   ├── grade.py              # Grade dataclass + grade_parse() 路由
 │   │   ├── json_parser.py        # JSON/JSONL: strict(ijson) + tolerant(json5)
 │   │   ├── csv_parser.py         # CSV/TSV: strict(列一致) + tolerant(skip bad lines)
-│   │   ├── sql_parser.py         # SQL 文本: regex 抽 CREATE/INSERT 头部
-│   │   └── sqlite_parser.py      # SQLite: sqlite3.connect 读 schema
+│   │   ├── sql_parser.py         # SQL 文本: regex 抽 CREATE/INSERT 头部 + 方言标注
+│   │   └── xlsx_parser.py        # xlsx: openpyxl read_only 读 sheet 表头 (二进制只读)
 │   ├── extract/                  # [阶段2] Schema 单元化提取 (仅 tier1)
 │   │   ├── extractor.py          # extract_all()(内存) + stream_schema_units()/finalize_from_units()(流式) + extract_five_infos() 薄包装
 │   │   ├── schema_types.py       # 共享 TypedDict: SchemaPartition/SchemaUnit/FieldInfo/VocabTable
@@ -131,9 +130,8 @@ detect/
 
 ## 禁止事项
 
-- ❌ **整文件 load**（违反 GB 量级流式约束）——大 JSON 走 ijson、JSONL 逐行、SQLite/CSV 流式分桶。
+- ❌ **整文件 load**（违反 GB 量级流式约束）——大 JSON 走 ijson、JSONL 逐行、CSV/xlsx 流式分桶。
 - ❌ **持久化或落盘 PII 原始值**——`profile_value()` 即时丢弃输入，只返回特征 dict。样本保留是 owner 授权的显式 opt-in 例外（`--keep-samples`，默认关），非 `--keep-samples` 路径绝不落原值。
-- ❌ **文本解析 `.db`**——必须走 `sqlite_parser` / `_partition_sqlite` 的二进制只读路径。
-- ❌ **以扩展名作为格式判据**——只能作弱先验，真值来自内容嗅探。
+- ❌ **对结构化扩展名再做内容投票**——`.txt`/`.log`/无扩展名才投票；json/csv/sql/xlsx 等后缀直接信任，格式错配交由阶段1 容错解析暴露为 tier2/3。
 - ❌ **直接 import `parsers/`**——它依赖不在本仓库的外部框架（`core.base` 等），import 会失败；该目录为参考实现。
 - ❌ **混用 `extract_all()` 与 `extract_five_infos()` 的输出**——前者 Schema 单元化带溯源，后者是拍平的全局扁平 dict，格式不同。

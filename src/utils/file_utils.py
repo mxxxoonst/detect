@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Iterator, Union
 
-from src.constants import SNIFF_HEAD_BYTES, SQLITE_MAGIC, MAX_BINARY_RATIO
+from src.constants import SNIFF_HEAD_BYTES, MAX_BINARY_RATIO
 
 
 def read_head_bytes(path: Union[str, Path], n: int = SNIFF_HEAD_BYTES) -> bytes:
@@ -38,9 +38,24 @@ def is_binary(raw: bytes) -> bool:
     return (control_count / len(raw)) > MAX_BINARY_RATIO
 
 
-def is_sqlite_magic(raw16: bytes) -> bool:
-    """检查是否为 SQLite 数据库魔数."""
-    return raw16[: len(SQLITE_MAGIC)] == SQLITE_MAGIC
+_BOMS = (
+    (b"\xff\xfe\x00\x00", "utf-32"),
+    (b"\x00\x00\xfe\xff", "utf-32"),
+    (b"\xff\xfe", "utf-16"),
+    (b"\xfe\xff", "utf-16"),
+    (b"\xef\xbb\xbf", "utf-8-sig"),
+)
+
+
+def detect_bom(raw: bytes) -> "str | None":
+    """识别 UTF-16/32/8 BOM → 编码名; 无 BOM → None。
+
+    UTF-16/32 文本含大量 \\x00, 不先识别 BOM 会被 is_binary() 误判为二进制。
+    """
+    for bom, enc in _BOMS:
+        if raw.startswith(bom):
+            return enc
+    return None
 
 
 def walk_files(root: Union[str, Path]) -> Iterator[str]:

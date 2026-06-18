@@ -2,6 +2,7 @@
 
 import json
 import re
+from collections import Counter
 from statistics import stdev
 from typing import List, Dict
 
@@ -57,6 +58,19 @@ def column_stability(lines: List[str], sep: str) -> tuple:
         return 0, 0.0, []
     sd = stdev(col_counts) if len(col_counts) > 1 else 0.0
     return col_counts[0], sd, col_counts
+
+
+def column_profile(lines: List[str], sep: str) -> tuple:
+    """返回 (众数列数, 命中众数的行占比, 行数)。
+
+    相比 column_stability 用"首行列数 + 标准差", 这里用"众数列数 + 命中比例",
+    对少数因 value 内嵌分隔符而漂移的行更鲁棒 (无表头 CSV 也适用)。
+    """
+    col_counts = [line.count(sep) + 1 for line in lines]
+    if not col_counts:
+        return 0, 0.0, 0
+    modal_cols, modal_n = Counter(col_counts).most_common(1)[0]
+    return modal_cols, modal_n / len(col_counts), len(col_counts)
 
 
 def first_line_looks_like_header(line: str) -> bool:

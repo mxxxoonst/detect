@@ -1,5 +1,6 @@
 """schema_partition 测试：文件内 Schema 分片。"""
 
+import pytest
 
 from src.extract.schema_partition import partition_file
 from src.parse.grade import Grade
@@ -13,6 +14,36 @@ def _make_grade(path: str, fmt: str, enc: str = "utf-8") -> Grade:
 def _consume(partition) -> list:
     """将 partition 的 record_iter 全部消费为 list。"""
     return list(partition["record_iter"])
+
+
+# ── xlsx: 每 sheet 一个 partition ─────────────────────────────────────────────
+
+class TestXlsx:
+    def _make_xlsx(self, tmp_path) -> str:
+        openpyxl = pytest.importorskip("openpyxl")
+        p = tmp_path / "t.xlsx"
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "people"
+        ws.append(["name", "phone"])
+        ws.append(["Alice", "13800000001"])
+        ws.append(["Bob", "13900000002"])
+        wb.save(str(p))
+        return str(p)
+
+    def test_one_partition_per_sheet(self, tmp_path):
+        grade = _make_grade(self._make_xlsx(tmp_path), "xlsx", "binary")
+        parts, stats = partition_file(grade)
+        assert stats["format"] == "xlsx"
+        assert len(parts) == 1
+        assert parts[0]["partition_id"] == "people"
+
+    def test_rows_zip_headers(self, tmp_path):
+        grade = _make_grade(self._make_xlsx(tmp_path), "xlsx", "binary")
+        parts, _ = partition_file(grade)
+        rows = _consume(parts[0])
+        assert rows[0]["name"] == "Alice"
+        assert rows[0]["phone"] == "13800000001"
 
 
 # ── JSON: 显式包装 key ────────────────────────────────────────────────────────
@@ -214,52 +245,6 @@ class TestSql:
         assert len(records) == 3
         assert "order_id" in records[0]
         assert "amount" in records[0]
-
-
-# ── SQLite ────────────────────────────────────────────────────────────────────
-
-class TestSqlite:
-    def test_three_tables_three_partitions(self, three_table_db):
-        grade = _make_grade(three_table_db, "sqlite")
-        parts, stats = partition_file(grade)
-
-        assert len(parts) == 3
-        assert stats["method"] == "table_name"
-
-    def test_partition_ids_are_table_names(self, three_table_db):
-        grade = _make_grade(three_table_db, "sqlite")
-        parts, _ = partition_file(grade)
-
-        ids = {p["partition_id"] for p in parts}
-        assert ids == {"users", "orders", "products"}
-
-    def test_row_data_is_correct(self, three_table_db):
-        grade = _make_grade(three_table_db, "sqlite")
-        parts, _ = partition_file(grade)
-
-        users_part = next(p for p in parts if p["partition_id"] == "users")
-        records = _consume(users_part)
-
-        assert len(records) == 3
-        names = [r["name"] for r in records]
-        assert "Alice" in names
-
-    def test_products_partition_has_price(self, three_table_db):
-        grade = _make_grade(three_table_db, "sqlite")
-        parts, _ = partition_file(grade)
-
-        prod_part = next(p for p in parts if p["partition_id"] == "products")
-        records = _consume(prod_part)
-
-        assert len(records) == 3
-        assert "price" in records[0]
-
-    def test_format_is_sqlite(self, three_table_db):
-        grade = _make_grade(three_table_db, "sqlite")
-        parts, _ = partition_file(grade)
-
-        for p in parts:
-            assert p["format"] == "sqlite"
 
 
 # ── PartitionStats 完整性 ─────────────────────────────────────────────────────
