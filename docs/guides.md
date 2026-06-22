@@ -39,18 +39,17 @@ corpus_root (目录/单文件)
 
 单文件真实格式判定。**设计取舍**：真实语料中 json/csv/jsonl/sql/tsv/xlsx 等结构化文件 ~99% 后缀与内容一致（噪声留给阶段1 容错解析暴露，不在嗅探期纠格式），故对这些扩展名**直接信任**；仅 `.txt`/`.log`/无扩展名等无强先验文件才做内容投票。流程（短路顺序）：
 
-1. `file_size==0` → `("empty","utf-8",1.0)`。
-2. 扩展名命中 `_TRUSTED_EXT`（json/jsonl/ndjson/csv/tsv/sql/xlsx）→ 直接返回该格式，conf=1.0。
+1. 扩展名命中 `_TRUSTED_EXT`（json/jsonl/ndjson/csv/tsv/sql/xlsx）→ 直接返回该格式，conf=1.0。
    - `xlsx` 为二进制：`("xlsx","binary",1.0)`，不探编码。
    - 其余文本类：`_detect_text_encoding()` 先看 BOM（UTF-16/32），否则 chardet → 返回 `(fmt, enc, 1.0)`。
-3. 其余扩展名走 `_sniff_by_content()`：
+2. 其余扩展名走 `_sniff_by_content()`：
    - 读前 1KB，`is_binary()`（无 BOM 时）判二进制 → `("binary_unknown","binary",0.6)`。
    - 读 64KB 头部（`SNIFF_HEAD_BYTES`）→ BOM/chardet 探编码 → `safe_decode(errors="replace")` → 取前 20 非空行（`SNIFF_LINES`）。
-   - 无非空行 → `("empty", enc, 1.0)`。
-   - 多候选加权投票 `vote_format()`，取最高分；`conf < ACCEPT_THRESHOLD(0.5)` → 归 `free_text`。
+   - 多候选加权投票 `vote_format()`，取最高分；`conf < ACCEPT_THRESHOLD(0.5)` → 归 `free_text`（纯空白文件无非空行 → 全 0 分 → 同样落 `free_text`）。
 
-`real_format` 取值域：`json|jsonl|csv|tsv|sql|xlsx|log|free_text|binary_unknown|empty`。
+`real_format` 取值域：`json|jsonl|csv|tsv|sql|xlsx|log|free_text|binary_unknown`。
 
+> **0 字节文件不入嗅探**：统一约定在各命令处理起点按文件大小跳过 0 字节文件，`sniff_file` 不再处理 `empty`（已删两个 `empty` 返回分支）。落地两处：parse/extract/pipeline 在 sniff 前按 `st_size==0` 跳过并计 `skipped_empty`（`main.py:150`）；`sniff` 命令在 `profile_corpus` 遍历起点按 `file_size==0` 跳过（同样计 `skipped_empty`）。故 `empty` 不再是任何输出里的格式取值。
 > `.db`/`.sqlite` 二进制路径已移除（真实样例太少）；若遇到 `.db` 文件会落到内容投票路径并多半判 `binary_unknown`。
 
 ### 2.2 `voting.py` · `vote_format(lines, full_text) → {fmt: score}`
@@ -61,10 +60,12 @@ corpus_root (目录/单文件)
 |------|------|------|
 | `json` | strip 后首字符是 `{`/`[` | +0.6；括号闭合再 +0.3 |
 | `jsonl` | 每行能独立 `json.loads` 的比例 > 0.8 | +0.9 |
-| `csv`/`tsv` | 分隔符（`\t`/`,`/`;`/`\|`）列数跨行稳定（首行 ≥2 列、列数标准差 <0.5） | +0.8；首行像表头再 +0.1 |
-| `sql` | 命中 `SQL_KEYWORD_PATTERN` | +0.7 |
-| `log` | 行命中 `LOG_PATTERN`（时间戳/级别）比例 > 0.6 | +0.85 |
+| `csv`/`tsv` | 分隔符（`\t`/`,`/`;`/`\|`/`:`）众数列数 ≥2 且命中众数的行占比 ≥0.7（`column_profile`，容忍少数 value 内嵌分隔符的漂移行） | +0.8；首行像表头再 +0.1 |
+| `sql` | 关键词起一行（任意行）+ 文件含 `;` 结尾语句 → 强信号；否则仅 `SQL_KEYWORD_PATTERN` 命中或语句起行 | 强 +0.95；弱 +0.7 |
+| `log` | 行首时间戳 + 级别双命中（`LOG_TS_PREFIX`+`LOG_LEVEL`）比例 >0.6 → 强信号；否则仅 `LOG_PATTERN` 命中比例 >0.6 | 强 +0.95；弱 +0.85 |
 | `free_text` | 平均行长 >40 + 句末标点 + 无强结构信号 | +0.5 |
+
+> **CSV/TSV 的"众数列数"判据本身即一种容错解析**（`column_profile`）：不要求每行列数严格一致，而以"最常见列数 + 命中占比 ≥0.7"做多数表决，从而**容忍少数因 value 内嵌分隔符（如带逗号的引号字段）而漂移的行**，无表头 CSV 也适用。这与项目"嗅探期不纠格式、噪声留给阶段1 暴露"的总基调一致——嗅探阶段先用容错判据把"伪装成 .txt 的表格"稳健路由到 csv/tsv，真正的列漂移度量与可恢复性分级交由阶段1 `csv_parser` 的 `n_struct`（列漂移变异系数）承担（见 §3.2/§3.3）。同理 SQL/log 的强弱信号分档也是对噪声的容错权衡。
 
 ### 2.3 `profiler.py` · `profile_corpus(root, files=None)`
 
@@ -162,7 +163,7 @@ corpus_root (目录/单文件)
 3. **退化/旁路族**（CSV 的 I 恒 1.0、梯度在 `n_struct`；xlsx 二元）。
 
 > 由此 §3.2 那种"I≥0.99→tier1"的统一说法仅适用于 JSON 两路径；JSONL/SQL 是 ==1.0，CSV 看列漂移，
-> SQLite 看有无表。下游若按 `I` 字段统一排序可恢复性，需注意 CSV/SQL 的语义偏差（见 §12.6/§12.7）。
+> xlsx 看有无 sheet。下游若按 `I` 字段统一排序可恢复性，需注意 CSV/SQL 的语义偏差（见 §12.6/§12.7）。
 
 ---
 
@@ -212,7 +213,6 @@ grades.jsonl(tier1) ──► stream_schema_units()  逐文件 partition→build
 | JSON（顶层数组）/ JSONL | `structure_signature` 骨架聚类，每签名一桶 | `skeleton_cluster` |
 | CSV/TSV | 整文件单 partition；列数标准差 >0.5 或首行 <2 列 → `noisy=True` | `single` |
 | SQL 文本 | 流式扫描，按 CREATE/INSERT 表名分桶 | `table_name` |
-| SQLite | `sqlite_master` 读表名，每表 `SELECT * LIMIT SAMPLE_PER_FILE` | `table_name` |
 
 - 每桶最多采样 `SAMPLE_PER_FILE=1000` 条，`record_iter` 惰性流式。
 - **JSON 读取宽容度与阶段1 对齐**（`_stream_json_records(path, encoding)` / `_detect_explicit_keys`）：

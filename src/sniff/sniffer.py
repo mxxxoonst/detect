@@ -10,7 +10,7 @@ from typing import Tuple
 from src.constants import SNIFF_HEAD_BYTES, SNIFF_LINES, ACCEPT_THRESHOLD
 from src.utils.encoding import detect_encoding, safe_decode
 from src.utils.file_utils import (
-    read_head_bytes, read_first_bytes, is_binary, detect_bom, extension, file_size,
+    read_head_bytes, read_first_bytes, is_binary, detect_bom, extension,
 )
 from src.utils.text_utils import first_n_nonempty_lines
 from src.sniff.voting import vote_format
@@ -33,14 +33,14 @@ _TRUSTED_EXT = {
 def sniff_file(path: str) -> Tuple[str, str, float]:
     """嗅探单个文件的真实格式。
 
+    0 字节文件由调用方(main 的 parse 阶段 / profile_corpus)在进入前按文件大小跳过,
+    这里不再处理 empty。
+
     Returns:
         (real_format, encoding, confidence)
         real_format: 'json'|'jsonl'|'csv'|'tsv'|'sql'|'xlsx'|
-                     'log'|'free_text'|'binary_unknown'|'empty'
+                     'log'|'free_text'|'binary_unknown'
     """
-    if file_size(path) == 0:
-        return ("empty", "utf-8", 1.0)
-
     # ── 结构化扩展名: 直接信任 (xlsx 为二进制, 无需探编码) ──
     fmt = _TRUSTED_EXT.get(extension(path))
     if fmt is not None:
@@ -74,9 +74,7 @@ def _sniff_by_content(path: str) -> Tuple[str, str, float]:
     enc = bom_enc or detect_encoding(head)
     text = safe_decode(head, enc)
     lines = first_n_nonempty_lines(text, SNIFF_LINES)
-    if not lines:
-        return ("empty", enc, 1.0)
-
+    # 纯空白文件(无非空行): vote_format 全 0 分 → 落 free_text(低置信), 不再单列 empty
     scores = vote_format(lines, text)
     best = max(scores, key=scores.get)  # type: ignore[arg-type]
     conf = scores[best]

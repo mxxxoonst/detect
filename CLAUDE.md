@@ -131,7 +131,6 @@ detect/
 ## 禁止事项
 
 - ❌ **整文件 load**（违反 GB 量级流式约束）——大 JSON 走 ijson、JSONL 逐行、CSV/xlsx 流式分桶。
-- ❌ **持久化或落盘 PII 原始值**——`profile_value()` 即时丢弃输入，只返回特征 dict。样本保留是 owner 授权的显式 opt-in 例外（`--keep-samples`，默认关），非 `--keep-samples` 路径绝不落原值。
 - ❌ **对结构化扩展名再做内容投票**——`.txt`/`.log`/无扩展名才投票；json/csv/sql/xlsx 等后缀直接信任，格式错配交由阶段1 容错解析暴露为 tier2/3。
 - ❌ **直接 import `parsers/`**——它依赖不在本仓库的外部框架（`core.base` 等），import 会失败；该目录为参考实现。
 - ❌ **混用 `extract_all()` 与 `extract_five_infos()` 的输出**——前者 Schema 单元化带溯源，后者是拍平的全局扁平 dict，格式不同。

@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from src.sniff.sniffer import sniff_file
+from src.sniff.profiler import profile_corpus
 
 
 def _p(samples_dir: str, name: str) -> str:
@@ -46,9 +47,11 @@ def test_sniff_free_text(samples_dir):
     assert fmt == "free_text"
 
 
-def test_sniff_empty(samples_dir):
-    fmt, enc, conf = sniff_file(_p(samples_dir, "empty.txt"))
-    assert fmt == "empty"
+def test_empty_skipped_by_profiler(samples_dir):
+    # 0 字节文件在嗅探前按文件大小跳过, 不进入交叉表/格式分布(empty 不再是格式取值)
+    result = profile_corpus(samples_dir, files=[_p(samples_dir, "empty.txt")])
+    assert result["format_dist"] == {}
+    assert result["total_files"] == 0
 
 
 def test_sniff_binary(samples_dir):
