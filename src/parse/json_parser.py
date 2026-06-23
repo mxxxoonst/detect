@@ -2,10 +2,10 @@
 
 import ijson
 import json
-import json5
 from pathlib import Path
 
 from src.parse.grade import Grade
+from src.parse.json_recovery import looks_like_jsonl_path, tolerant_load_text
 from src.utils.encoding import safe_decode
 from src.utils.file_utils import count_lines, read_head_bytes
 from src.utils.logger import get_logger
@@ -14,11 +14,21 @@ log = get_logger(__name__)
 
 
 def parse_json(path: str, encoding: str) -> Grade:
-    """两级 ijson 流式策略解析 JSON 数组，兜底 json5 处理非数组/语法噪声。
+    """JSON 严格内核 (ijson 流式) + 容错叠加 (json5 / partial-array / JSONL 探测)。
 
-    Level 1: ijson.items 流式读完所有元素，无崩溃 → tier1, I=1.0
-    Level 2: ijson 中途崩溃但已读出部分元素 → 按行数比例估算 I(x)
-    兜底:    good==0（非数组 / 首条即损坏）→ json5 容错
+    单元粒度 = 顶层数组元素。N = C + P + L:
+      C = ijson 严格全程零异常消费到 EOF 的元素 (干净)。
+      P = json5 救回、可信的对象 (容错修复)。
+      L = ijson 崩溃点之后无法消费的残片 (落通道二)。
+
+    度量与 tier:
+      I_strict = C/N (种子门)；I = (C+P)/N (官方退化曲线)。
+      tier1 ⟺ I_strict==1 ⟺ ijson 全程零偏离消费到 EOF (零 P 零 L)。
+      容错路径 (json5 / partial) **封顶 tier2** —— 修过的文件绝不漏进种子库。
+
+    Level 1: ijson.items 流式读完所有元素且无崩溃 → strict OK → tier1, I_strict=1。
+    Level 2: ijson 中途崩溃但已读出部分元素 → partial-array, 崩溃点后估为 L。
+    兜底:    good==0 → 先探测 JSONL-as-.json (逐行独立对象), 否则走 json5 容错。
     """
     raw = read_head_bytes(path)
     text = safe_decode(raw, encoding)
@@ -27,40 +37,60 @@ def parse_json(path: str, encoding: str) -> Grade:
 
     if good > 0:
         if not crashed:
-            # ── Level 1: 全量解析成功 ──────────────────────────────
+            # ── Level 1: 严格内核全程零异常消费到 EOF → 干净种子 ────
             return Grade(
-                tier=1, I=1.0, fmt="json", encoding=encoding,
-                parsed={"type": "json", "path": path, "encoding": encoding},
+                tier=1, I=1.0, I_strict=1.0, fmt="json", encoding=encoding,
+                parsed={"type": "json", "path": path, "encoding": encoding, "units": good},
                 note=f"ijson strict OK, {good} items",
             )
 
-        # ── Level 2: 崩溃前读出了部分记录 ──────────────────────────
-        # estimated_total = 文件总行数 / (good_items 占的行数 / good_items)
-        #                 = 文件总行数 × good_items / lines_consumed
+        # ── Level 2: 崩溃前读出了部分记录 → partial-array (封顶 tier2) ──
+        # 崩溃点之后无法消费的记录纳入 L 计数 (修「早期崩溃后续不计」)。
+        # C = good (崩溃前严格消费成功)；崩溃说明至少 1 条损坏 → L >= 1。
         file_size = Path(path).stat().st_size
         total_lines = count_lines(path, encoding)
 
-        # 用字节比例近似 good_items 占的行数
-        # 注意: ijson 有读取缓冲，bytes_good 可能接近 file_size（末尾截断场景）
-        # 因此 estimated_total 下界取 good+1：崩溃说明至少还有 1 条损坏记录
+        # 用字节比例近似 good 占的行数, 外推总记录数 N (下界 good+1)。
         lines_consumed = max(1, round(total_lines * bytes_good / max(file_size, 1)))
         avg_lines_per_item = lines_consumed / good
         estimated_total = max(good + 1, round(total_lines / avg_lines_per_item))
-        I = min(good / estimated_total, 1.0)
-        tier = 1 if I >= 0.99 else 2
+
+        C = good
+        N = estimated_total
+        L = max(N - C, 1)            # 崩溃点之后 (含损坏的那条) 计 L
+        P = 0                        # ijson partial 不做 json5 二次救援, 故 P=0
+        I_strict = C / N
+        I = (C + P) / N
+        # 容错路径封顶 tier2: 即便 I 很高也不给 tier1 (堵 tier1 泄漏)。
+        tier = 2 if I > 0.0 else 3
 
         return Grade(
-            tier=tier, I=I, fmt="json", encoding=encoding,
+            tier=tier, I=I, I_strict=I_strict, fmt="json", encoding=encoding,
             parsed={
                 "type": "json", "path": path, "encoding": encoding,
-                "good_items": good, "estimated_total": estimated_total,
+                "good_items": C, "estimated_total": N,
+                "clean_items": C, "repaired_items": P, "lost_items": L,
             },
             n_form="partial_array",
-            n_detail={"kind": "partial_array", "reason": err_msg[:200], "offset": bytes_good},
-            note=f"ijson partial: {good}/{estimated_total} items, I={I:.3f}",
+            n_detail={"kind": "partial_array", "reason": err_msg[:200], "offset": bytes_good,
+                      "c_count": C, "p_count": P, "l_count": L, "n_total": N},
+            note=f"ijson partial: {C}/{N} items, I_strict={I_strict:.3f} I={I:.3f}",
         )
 
-    # ── 兜底: good==0，顶层非数组或首条即损坏 → json5 容错 ────────
+    # ── 兜底: good==0，顶层非数组或首条即损坏 ────────────────────
+    # 先探测 JSONL-as-.json (逐行独立对象), 消除静默零产出 (共享 json_recovery 单一真源)。
+    if looks_like_jsonl_path(path, encoding):
+        log.debug("JSON %s: 顶层数组零记录, 探测为逐行独立对象 → 转 JSONL 迭代", path)
+        grade = parse_jsonl(path, encoding)
+        grade.fmt = "json"          # 后缀仍是 .json, 仅标注以 JSONL 语义恢复
+        if grade.parsed is not None:
+            grade.parsed["jsonl_as_json"] = True
+        if grade.note:
+            grade.note = "JSONL-as-.json: " + grade.note
+        else:
+            grade.note = "JSONL-as-.json recovered"
+        return grade
+
     return _json_tolerant(path, encoding, text, "no items from ijson streaming")
 
 
@@ -128,15 +158,19 @@ def parse_jsonl(path: str, encoding: str) -> Grade:
         if total == 0:
             return Grade(tier=3, I=0.0, fmt="jsonl", encoding=encoding)
 
+        # JSONL: 每行一单元, 无中间「修复」态 → C=好行, L=坏行, P=0。
+        # I_strict = 好行/总行 (bad==0 ⟺ I_strict==1 ⟺ tier1)。
         I = good / total if total > 0 else 0.0
+        I_strict = I
         if bad:
-            log.debug("JSONL %s: %d 好行 / %d 坏行 (I=%.3f)", path, good, bad, I)
-        if I == 1.0:
-            return Grade(tier=1, I=1.0, fmt="jsonl", encoding=encoding,
+            log.debug("JSONL %s: %d 好行 / %d 坏行 (I_strict=%.3f)", path, good, bad, I_strict)
+        if bad == 0:
+            return Grade(tier=1, I=1.0, I_strict=1.0, fmt="jsonl", encoding=encoding,
                          parsed={"type": "jsonl", "units": good})
-        return Grade(tier=2, I=I, fmt="jsonl", encoding=encoding,
+        return Grade(tier=2, I=I, I_strict=I_strict, fmt="jsonl", encoding=encoding,
                      n_form="jsonl_parse_error",
-                     n_detail={"kind": "jsonl_parse_error", "bad_count": bad, "samples": bad_samples},
+                     n_detail={"kind": "jsonl_parse_error", "bad_count": bad, "samples": bad_samples,
+                               "c_count": good, "p_count": 0, "l_count": bad, "n_total": total},
                      parsed={"type": "jsonl", "units": good, "bad_lines": bad})
     except Exception as e:
         log.warning("JSONL 解析失败 %s: %s", path, e)
@@ -151,7 +185,7 @@ def _json_tolerant(path: str, encoding: str, text: str, strict_error: str) -> Gr
       - head 仅覆盖部分 (大文件) → 按平均对象字节数外推 estimated_total
     """
     try:
-        data = json5.loads(text)
+        data = tolerant_load_text(text)   # 共享 json_recovery 单一真源 (与 extract 同源)
 
         if isinstance(data, list):
             recovered = len(data)
@@ -173,12 +207,20 @@ def _json_tolerant(path: str, encoding: str, text: str, strict_error: str) -> Gr
             total_units = max(recovered, int(fsize / avg_obj_bytes))
             I = min(recovered / total_units, 1.0)
 
-        tier = 1 if I >= 0.99 else 2
+        if recovered == 0:
+            return Grade(tier=3, I=0.0, I_strict=0.0, fmt="json", encoding=encoding,
+                         n_form=_classify_json_error(strict_error),
+                         note="json5 recovered nothing")
+
+        # 容错路径封顶 tier2: json5 修过 ⟹ 严格侧零通过 ⟹ I_strict=0, 绝不给 tier1。
+        # 恢复内容全部计 P (可信修复), 故 I=(C+P)/N 中 C=0。
+        I_strict = 0.0
+        tier = 2
         return Grade(
-            tier=tier, I=I, fmt="json", encoding=encoding,
+            tier=tier, I=I, I_strict=I_strict, fmt="json", encoding=encoding,
             parsed={"type": "json", "tolerant": True, "units": recovered},
             n_form=_classify_json_error(strict_error),
-            note=f"json5 tolerant recovery, I={I:.3f}",
+            note=f"json5 tolerant recovery, I_strict={I_strict:.3f} I={I:.3f}",
         )
     except Exception as e2:
         log.warning("JSON json5 容错也失败 %s: strict=%s; tolerant=%s",

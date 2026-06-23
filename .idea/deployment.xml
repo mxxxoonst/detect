@@ -13,6 +13,8 @@
             <excludedPath local="true" path="$PROJECT_DIR$/output" />
             <excludedPath local="true" path="$PROJECT_DIR$/test_data/samples" />
             <excludedPath local="true" path="$PROJECT_DIR$/resources" />
+            <excludedPath local="true" path="$PROJECT_DIR$/csv_tests" />
+            <excludedPath local="true" path="$PROJECT_DIR$/test_data/DataPart" />
           </excludedPaths>
         </serverdata>
       </paths>

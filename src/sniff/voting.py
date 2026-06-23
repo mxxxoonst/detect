@@ -79,11 +79,22 @@ def vote_format(lines: List[str], full_text: str) -> Dict[str, float]:
 
 
 def _vote_delimited(lines: List[str], scores: Dict[str, float], n: int):
-    """对 CSV/TSV/管道/冒号分隔符做投票 (众数列稳定性, 容忍少数漂移行)."""
+    """对 CSV/TSV/管道/冒号分隔符做投票 (众数列稳定性, 容忍少数漂移行)。
+
+    CSV/TSV 是**单分隔符**格式: 一份文件只用一种分隔符。故只取**最佳单一分隔符**计一次分,
+    **绝不跨分隔符累加**——否则 JSON 的 `"key": value,` 行同时命中 `,` 和 `:`, csv 被叠到
+    1.6 而盖过 JSON 的 0.9 (见 actually_json.txt 误判)。tab 排在候选首位, 平分时优先判 tsv。
+    """
+    best_fmt = None
+    best_score = 0.0
     for sep, fmt in [("\t", "tsv"), (",", "csv"), (";", "csv"), ("|", "csv"), (":", "csv")]:
         modal_cols, modal_frac, _ = column_profile(lines, sep)
         # 众数列数≥2 且多数行命中众数 → 分隔结构 (无表头 CSV、个别 value 内嵌分隔符均不掉票)
         if modal_cols >= 2 and modal_frac >= 0.7:
-            scores[fmt] += 0.8
+            s = 0.8
             if first_line_looks_like_header(lines[0]):
-                scores[fmt] += 0.1
+                s += 0.1
+            if s > best_score:
+                best_score, best_fmt = s, fmt
+    if best_fmt is not None:
+        scores[best_fmt] += best_score

@@ -17,12 +17,16 @@ from statistics import stdev
 from typing import Dict, Iterator, List, Tuple
 
 import ijson
-import json5
 
 from src.constants import SAMPLE_PER_FILE, SNIFF_HEAD_BYTES
 from src.extract.schema_types import PartitionStats, SchemaPartition
 from src.extract.skeleton import structure_signature
 from src.parse.grade import Grade
+from src.parse.json_recovery import (
+    looks_like_jsonl_path,
+    tolerant_json_records,
+    tolerant_load_text,
+)
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -103,14 +107,12 @@ def _detect_explicit_keys(path: str, encoding: str) -> Dict[str, list] | None:
         return None
 
     try:
-        data = json.loads(text)
-    except Exception:
-        # json5 容错（注释/单引号/尾逗号）；head 截断时也可能失败 → 回退骨架聚类
-        try:
-            data = json5.loads(text)
-        except Exception as e:
-            log.debug("显式 key 探测 json/json5 均失败, 回退骨架聚类 %s: %s", path, e)
-            return None
+        # 共享 json_recovery 单一真源 (json 严格 → json5 容错)，与 parse 阶段同源。
+        # head 截断时也可能失败 → 回退骨架聚类。
+        data = tolerant_load_text(text)
+    except Exception as e:
+        log.debug("显式 key 探测 json/json5 均失败, 回退骨架聚类 %s: %s", path, e)
+        return None
 
     if not isinstance(data, dict):
         return None
@@ -153,7 +155,8 @@ def _stream_json_records(path: str, encoding: str = "utf-8") -> Iterator[dict]:
             for item in ijson.items(f, "item"):
                 yielded += 1
                 yield item
-        return
+        if yielded:
+            return
     except Exception as e:
         log.debug("ijson 流式读失败, 回退容错整体加载 %s: %s", path, e)
         if yielded:
@@ -161,6 +164,25 @@ def _stream_json_records(path: str, encoding: str = "utf-8") -> Iterator[dict]:
             log.debug("ijson 崩溃前已产出 %d 条, 跳过兜底以免重复 %s", yielded, path)
             return
 
+    # ── 顶层数组零产出: 先探 JSONL-as-.json (与 parse 阶段 parse_json 同源), 是则逐行迭代 ──
+    if looks_like_jsonl_path(path, encoding):
+        log.debug("JSON 分片 %s: 顶层数组零记录, 探测为逐行独立对象 → JSONL 迭代", path)
+        try:
+            with open(path, "r", encoding=encoding, errors="replace") as f:
+                for line in f:
+                    s = line.strip()
+                    if not s:
+                        continue
+                    try:
+                        rec = json.loads(s)
+                    except json.JSONDecodeError:
+                        continue
+                    yield rec
+        except OSError as e:
+            log.warning("JSONL-as-.json 分片读取失败 %s: %s", path, e)
+        return
+
+    # ── 兜底: json 严格 → json5 容错 (共享 json_recovery 单一真源) ──
     try:
         with open(path, "r", encoding=encoding, errors="replace") as f:
             text = f.read()
@@ -168,20 +190,7 @@ def _stream_json_records(path: str, encoding: str = "utf-8") -> Iterator[dict]:
         log.warning("JSON 文本读取失败 %s: %s", path, e)
         return
 
-    data = None
-    try:
-        data = json.loads(text)
-    except Exception:
-        try:
-            data = json5.loads(text)
-        except Exception as e:
-            log.warning("JSON 严格与 json5 容错均失败 %s: %s", path, e)
-            return
-
-    if isinstance(data, list):
-        yield from data
-    elif isinstance(data, dict):
-        yield data
+    yield from tolerant_json_records(text)
 
 
 # ── JSONL ─────────────────────────────────────────────────────────────────────

@@ -18,6 +18,7 @@ class Grade:
     """
     tier: int | str
     I: Optional[float]
+    I_strict: Optional[float] = None   # 种子门 C/N; tier1 ⟺ I_strict==1。非结构化/未实现为 None
     parsed: Any = None
     fmt: str = ""
     error: Optional[str] = None
@@ -38,6 +39,7 @@ def grade_from_summary(d: dict) -> Grade:
     return Grade(
         tier=d.get("tier"),
         I=d.get("I"),
+        I_strict=d.get("I_strict"),
         fmt=d.get("fmt", ""),
         encoding=d.get("encoding", "utf-8"),
         path=d.get("path", ""),

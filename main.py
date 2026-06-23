@@ -450,6 +450,7 @@ def _grade_summary(grade):
         "fmt": grade.fmt,
         "tier": grade.tier,
         "I": grade.I,
+        "I_strict": grade.I_strict,
         "encoding": grade.encoding,
         "error": grade.error,
         "n_form": grade.n_form,

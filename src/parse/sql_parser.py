@@ -1,90 +1,178 @@
-"""SQL 文本解析器: regex 抽取 CREATE/INSERT 头部, 不做 AST."""
+"""SQL 文本解析器: 严格内核 (scan_sql 状态机) + 容错抽取 (regex 降级)。
+
+角色解耦 (见 docs/parser_strict_tolerant_design.md §2.4):
+- **严格内核** = `sql_strict.scan_sql_file`: 引号/注释/括号/`$$`/`--` 感知的超集分句器,
+  全语句平衡、扫到 EOF 无截断、每条可归类 ⟹ strict_ok (I_strict==1 ⟺ tier1)。
+- **容错叠加** = 现有 regex (`CREATE_INSERT_RE`) **降级**为抽取器, 跑在 scan_sql 切出的语句
+  边界上: 损坏语句里仍能抽出 表名+列清单 → schema 进通道一 (P); 连头都抽不出 → L。
+- **度量** I 改为**语句级可恢复性** (C+P)/N, 不再是 CREATE/INSERT 关键词纯度;
+  引号/括号闭合由状态机精确判定, 取代裸奇偶 `_check_unclosed_quotes`。
+- **方言探测** `_detect_sql_dialect` 保留为弱元数据, **不参与**严格判定。
+
+PII 红线: 流式扫到 EOF, 抽出表名/列名等结构事实后即丢弃中间文本; grades.jsonl 不落 SQL 原文。
+"""
 
 import re
+from typing import NamedTuple, Optional
 
 from src.parse.grade import Grade
+from src.parse.sql_strict import iter_sql_file_statements
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
 
 
+class _ScanCounts(NamedTuple):
+    """惰性累加得到的 scan 层计数 (替代物化 ScanResult, 口径与 sql_strict.summarize 一致)。"""
+    n_total: int
+    n_balanced: int
+    n_truncated: int
+    n_unbalanced: int
+    n_form: Optional[str]
+
+
+# 容错抽取器: 在 scan_sql 切出的语句边界上抽 schema 头部 (降级自原 tier 判定主力)。
 CREATE_INSERT_RE = re.compile(
     r'\b(CREATE\s+TABLE|CREATE\s+INDEX|INSERT\s+INTO|DROP\s+TABLE|ALTER\s+TABLE)\b',
     re.IGNORECASE
 )
-STATEMENT_DELIMITERS = re.compile(r';\s*\n|;\s*$')
+
+# 方言探测仍只看头部 (弱元数据, 不参与严格判定), 故只读前 64KB 喂 _detect_sql_dialect。
+_DIALECT_HEAD = 65536
 
 
 def parse_sql_text(path: str, encoding: str) -> Grade:
-    """Regex 抽取 SQL 文件中的 CREATE/INSERT 头部."""
+    """严格内核 (scan_sql) 切句 + 容错 regex 抽 schema, 产语句级 I / I_strict / tier。
+
+    **惰性消费** `iter_sql_file_statements`: 单遍累加 C/P/L + has_create/insert + scan 计数,
+    **不 `list()` 物化全部语句** (GB SQL dump 内存恒定, 见 docs §4 / plan Phase 4)。
+    """
+    # ── 容错叠加 + 严格内核合一: 惰性逐条消费状态机切出的语句边界, 单遍累加 ──
+    # 单元粒度 = 语句。N = 语句总数。
+    #   C = 平衡且正常收尾、且能抽出 schema 头的语句 (严格内核直接消费成功)。
+    #   P = 不可信但 regex 仍救回 schema 的语句 (损坏但抽出 表名/列 → 进通道一)。
+    #   L = 截断/未闭合, 或连 schema 头都抽不出的语句 (落通道二)。
+    N = 0
+    C = 0
+    P = 0
+    L = 0
+    n_truncated = 0
+    n_unbalanced = 0
+    has_create = False
+    has_insert = False
     try:
-        with open(path, "r", encoding=encoding, errors="replace") as f:
-            text = f.read(65536)  # 只读前 64KB, SQL schema 一般不大
+        for st in iter_sql_file_statements(path, encoding):
+            N += 1
+            if st.truncated:
+                n_truncated += 1
+            if not st.balanced:
+                n_unbalanced += 1
+            extractable = bool(CREATE_INSERT_RE.search(st.text))
+            if extractable:
+                up = st.text.upper()
+                if "CREATE TABLE" in up:
+                    has_create = True
+                if "INSERT INTO" in up:
+                    has_insert = True
+            clean = st.balanced and st.terminated and not st.truncated
+            if clean and extractable:
+                C += 1
+            elif extractable:
+                # 损坏 (未闭合/截断/无正常收尾) 但 regex 仍抽出 schema → 可信恢复, 计 P。
+                P += 1
+            else:
+                # 截断尾句, 或非 DDL/DML (纯注释/SELECT/未知) 抽不出头 → L。
+                L += 1
     except Exception as e:
-        log.warning("SQL 读头失败 %s: %s", path, e)
+        log.warning("SQL scan 失败 %s: %s", path, e)
         return Grade(tier=3, I=0.0, fmt="sql", encoding=encoding, error=str(e))
 
-    if not text.strip():
+    if N == 0:
         return Grade(tier=3, I=0.0, fmt="sql", encoding=encoding, note="empty file")
 
-    # C0: text 非空 → 一律探测方言, tier1/2/3 都带 dialect 标, 供方言分布 survey
-    dialect_info = _detect_sql_dialect(text)
+    # scan 层汇总 (与 sql_strict.summarize 口径一致, 惰性累加得来, 不物化语句)。
+    n_balanced = N - n_unbalanced
+    if n_truncated > 0:
+        scan_n_form = "truncated"
+    elif n_unbalanced > 0:
+        scan_n_form = "unbalanced"
+    else:
+        scan_n_form = None
+    scan = _ScanCounts(n_total=N, n_balanced=n_balanced,
+                       n_truncated=n_truncated, n_unbalanced=n_unbalanced,
+                       n_form=scan_n_form)
 
-    # 统计所有语句分隔符位置, 估算 statement 数量
-    statements = STATEMENT_DELIMITERS.split(text)
-    # 过滤空语句
-    statements = [s.strip() for s in statements if s.strip()]
+    # 方言探测: 弱元数据, 仅扫头部, 不参与严格判定。
+    dialect_info = _detect_dialect_head(path, encoding)
 
-    total = len(statements)
-    if total == 0:
+    # I_strict = C/N (种子门); I = (C+P)/N (官方退化曲线)。
+    I_strict = C / N if N > 0 else 0.0
+    I = (C + P) / N if N > 0 else 0.0
+
+    # tier 由 I_strict / I 共同决定 (不再由单一容错路径铸造)。
+    if I_strict == 1.0:
+        tier = 1
+    elif I > 0.0:
+        tier = 2
+    else:
+        tier = 3
+
+    # 若整文件抽不出任何 CREATE/INSERT (C==0 ∧ P==0), 沿用旧语义记 tier3。
+    if C == 0 and P == 0:
         return Grade(tier=3, I=0.0, fmt="sql", encoding=encoding,
-                     n_detail=dialect_info, note="no statements found")
+                     I_strict=0.0,
+                     n_detail=_merge_detail(dialect_info, scan, C, P, L),
+                     note="no CREATE/INSERT statements found")
 
-    # 统计含有 CREATE TABLE/INSERT 等关键操作的语句
-    complete = sum(1 for s in statements if CREATE_INSERT_RE.search(s))
+    n_detail = _merge_detail(dialect_info, scan, C, P, L)
+    note = None
+    if tier != 1:
+        # 形式层破坏摘要 (结构化, 不落原文)。
+        n_detail.update({"kind": "sql_incomplete"})
+        if scan.n_truncated > 0:
+            note = f"{scan.n_truncated} truncated/unbalanced statements"
+            log.debug("SQL %s: C=%d P=%d L=%d N=%d I_strict=%.3f I=%.3f, %d truncated",
+                      path, C, P, L, N, I_strict, I, scan.n_truncated)
 
-    if complete == 0:
-        return Grade(tier=3, I=0.0, fmt="sql", encoding=encoding,
-                     n_detail=dialect_info, note="no CREATE/INSERT statements found")
-
-    I = complete / total if total > 0 else 0.0
-    tier = 1 if I == 1.0 else 2
-
-    # 检查是否有不完整的 SQL (引号不闭合)
-    # 注: 引号奇偶计数是方言朴素的粗判 (不识别 '' 转义 / $$ dollar-quote / E'..'),
-    #     会高估未闭合; 方言无关的精确判定随任务 C(超集分句器)落地。
-    incomplete_info = None
-    n_detail = dict(dialect_info)   # 始终带方言标; tier2 再叠加失败细节
-    if tier == 2:
-        unclosed = _check_unclosed_quotes(statements)
-        n_detail.update({"kind": "sql_incomplete", "complete": complete,
-                         "total": total, "unclosed_quotes": unclosed})
-        if unclosed > 0:
-            incomplete_info = f"{unclosed} statements with unclosed quotes"
-            log.debug("SQL %s: %d/%d 完整语句, %d 条引号不配对",
-                      path, complete, total, unclosed)
-
-    return Grade(tier=tier, I=I, fmt="sql", encoding=encoding,
+    return Grade(tier=tier, I=I, I_strict=I_strict, fmt="sql", encoding=encoding,
+                 n_form=scan.n_form,
                  parsed={
                      "type": "sql",
-                     "total_statements": total,
-                     "complete_statements": complete,
-                     "has_create": any("CREATE TABLE" in s.upper() for s in statements),
-                     "has_insert": any("INSERT INTO" in s.upper() for s in statements),
+                     "total_statements": N,
+                     "clean_statements": C,
+                     "repaired_statements": P,
+                     "lost_statements": L,
+                     "has_create": has_create,
+                     "has_insert": has_insert,
                  },
                  n_detail=n_detail,
-                 note=incomplete_info)
+                 note=note)
 
 
-def _check_unclosed_quotes(statements: list) -> int:
-    """检查有多少条语句的引号不配对."""
-    count = 0
-    for stmt in statements:
-        single = stmt.count("'")
-        double = stmt.count('"')
-        if single % 2 != 0 or double % 2 != 0:
-            count += 1
-    return count
+def _merge_detail(dialect_info: dict, scan, C: int, P: int, L: int) -> dict:
+    """合并方言元数据 + scan 计数细节 (结构化, 不含 SQL 原文)。"""
+    d = dict(dialect_info)
+    d.update({
+        "n_total": scan.n_total,
+        "c_count": C,
+        "p_count": P,
+        "l_count": L,
+        "n_balanced": scan.n_balanced,
+        "n_truncated": scan.n_truncated,
+        "n_unbalanced": scan.n_unbalanced,
+    })
+    return d
+
+
+def _detect_dialect_head(path: str, encoding: str) -> dict:
+    """只读头部喂方言探测 (弱元数据, 不参与严格判定)。读失败回退 ansi/unknown。"""
+    try:
+        with open(path, "r", encoding=encoding, errors="replace") as f:
+            head = f.read(_DIALECT_HEAD)
+    except Exception as e:
+        log.debug("SQL 方言探测读头失败 %s: %s", path, e)
+        return {"dialect": "ansi", "dialect_status": "unknown", "dialect_scores": {}}
+    return _detect_sql_dialect(head)
 
 
 # ── C0: 方言探测 (标记投票, 仅作弱元数据; 不参与解析/分句) ──────────────────────

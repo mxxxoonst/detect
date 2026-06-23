@@ -126,11 +126,9 @@ detect/
 - **ID 作用域**：`SchemaUnit` id（`sch_NNNNN`）与 `field_id`（`f_NNNNN_NN`）在单次 pipeline 运行内自增，
   不跨 run 持久化；`reset_unit_counter()` 仅供测试。
 - **骨架签名非 JSON**：`structure_signature()` 输出含裸类型标记（`<int>` 等），不是合法 JSON；解析前需 `re.sub` 归一化。
-- **新增格式/PII 类型的接入点**见 `docs/guides.md` 的扩展指南。
 
 ## 禁止事项
 
-- ❌ **整文件 load**（违反 GB 量级流式约束）——大 JSON 走 ijson、JSONL 逐行、CSV/xlsx 流式分桶。
 - ❌ **对结构化扩展名再做内容投票**——`.txt`/`.log`/无扩展名才投票；json/csv/sql/xlsx 等后缀直接信任，格式错配交由阶段1 容错解析暴露为 tier2/3。
 - ❌ **直接 import `parsers/`**——它依赖不在本仓库的外部框架（`core.base` 等），import 会失败；该目录为参考实现。
 - ❌ **混用 `extract_all()` 与 `extract_five_infos()` 的输出**——前者 Schema 单元化带溯源，后者是拍平的全局扁平 dict，格式不同。
