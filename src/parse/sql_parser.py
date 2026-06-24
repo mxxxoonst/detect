@@ -31,9 +31,11 @@ class _ScanCounts(NamedTuple):
     n_form: Optional[str]
 
 
-# 容错抽取器: 在 scan_sql 切出的语句边界上抽 schema 头部 (降级自原 tier 判定主力)。
-CREATE_INSERT_RE = re.compile(
-    r'\b(CREATE\s+TABLE|CREATE\s+INDEX|INSERT\s+INTO|DROP\s+TABLE|ALTER\s+TABLE)\b',
+# 研究范围内的"信息单元": 只有 CREATE TABLE / INSERT INTO 产出 IR (建表结构 + 样本行)。
+# I_strict / I 的分母 N 只统计这两类语句; 注释 / SET / LOCK / DROP / ALTER / SELECT 等
+# 脚手架语句出范围 → 既不进分子也不进分母 (见 parse_sql_text 的单遍累加)。
+IN_SCOPE_RE = re.compile(
+    r'\b(CREATE\s+TABLE|INSERT\s+INTO)\b',
     re.IGNORECASE
 )
 
@@ -48,68 +50,79 @@ def parse_sql_text(path: str, encoding: str) -> Grade:
     **不 `list()` 物化全部语句** (GB SQL dump 内存恒定, 见 docs §4 / plan Phase 4)。
     """
     # ── 容错叠加 + 严格内核合一: 惰性逐条消费状态机切出的语句边界, 单遍累加 ──
-    # 单元粒度 = 语句。N = 语句总数。
-    #   C = 平衡且正常收尾、且能抽出 schema 头的语句 (严格内核直接消费成功)。
-    #   P = 不可信但 regex 仍救回 schema 的语句 (损坏但抽出 表名/列 → 进通道一)。
-    #   L = 截断/未闭合, 或连 schema 头都抽不出的语句 (落通道二)。
+    # 单元粒度 = **研究范围内的语句** (CREATE TABLE / INSERT INTO)。N = 范围内语句数。
+    #   C = 范围内、平衡且正常收尾 (严格内核直接消费成功)。
+    #   P = 范围内、未闭合但未截断 → regex 仍可抽 表名/列 → 进通道一 (可信恢复)。
+    #   L = 范围内、截断 (尾部丢失, schema/行可能不全) → 落通道二。
+    # 脚手架语句 (注释/SET/LOCK/DROP/ALTER/SELECT 等, 不匹配 IN_SCOPE_RE) **出范围**:
+    #   既不进 N 也不进 C/P/L, 只在 scan 层计 n_total/n_truncated/n_unbalanced 作文件健康元数据。
+    #   修复: 旧逻辑把脚手架计入 L 稀释 I_strict, 令干净 mysqldump (~10 条 SET/注释) 普遍掉 tier2。
     N = 0
     C = 0
     P = 0
     L = 0
+    n_total = 0          # scan 层全部语句 (含脚手架), 仅作文件健康元数据
     n_truncated = 0
     n_unbalanced = 0
+    n_ignored = 0        # 出范围 (脚手架) 语句数
     has_create = False
     has_insert = False
     try:
         for st in iter_sql_file_statements(path, encoding):
-            N += 1
+            n_total += 1
             if st.truncated:
                 n_truncated += 1
             if not st.balanced:
                 n_unbalanced += 1
-            extractable = bool(CREATE_INSERT_RE.search(st.text))
-            if extractable:
-                up = st.text.upper()
-                if "CREATE TABLE" in up:
-                    has_create = True
-                if "INSERT INTO" in up:
-                    has_insert = True
-            clean = st.balanced and st.terminated and not st.truncated
-            if clean and extractable:
+            if not IN_SCOPE_RE.search(st.text):
+                n_ignored += 1                       # 出范围: 不进 N / C / P / L
+                continue
+            N += 1
+            up = st.text.upper()
+            if "CREATE TABLE" in up:
+                has_create = True
+            if "INSERT INTO" in up:
+                has_insert = True
+            if st.balanced and st.terminated and not st.truncated:
                 C += 1
-            elif extractable:
-                # 损坏 (未闭合/截断/无正常收尾) 但 regex 仍抽出 schema → 可信恢复, 计 P。
-                P += 1
+            elif st.truncated:
+                L += 1                               # 尾部截断 → 通道二
             else:
-                # 截断尾句, 或非 DDL/DML (纯注释/SELECT/未知) 抽不出头 → L。
-                L += 1
+                P += 1                               # 未闭合但完整 → regex 抽头 → 通道一
     except Exception as e:
         log.warning("SQL scan 失败 %s: %s", path, e)
         return Grade(tier=3, I=0.0, fmt="sql", encoding=encoding, error=str(e))
 
-    if N == 0:
+    if n_total == 0:
         return Grade(tier=3, I=0.0, fmt="sql", encoding=encoding, note="empty file")
 
-    # scan 层汇总 (与 sql_strict.summarize 口径一致, 惰性累加得来, 不物化语句)。
-    n_balanced = N - n_unbalanced
+    # scan 层汇总 (over 全部语句, 文件健康元数据; 不参与 I/tier 计算)。
+    n_balanced = n_total - n_unbalanced
     if n_truncated > 0:
         scan_n_form = "truncated"
     elif n_unbalanced > 0:
         scan_n_form = "unbalanced"
     else:
         scan_n_form = None
-    scan = _ScanCounts(n_total=N, n_balanced=n_balanced,
+    scan = _ScanCounts(n_total=n_total, n_balanced=n_balanced,
                        n_truncated=n_truncated, n_unbalanced=n_unbalanced,
                        n_form=scan_n_form)
 
     # 方言探测: 弱元数据, 仅扫头部, 不参与严格判定。
     dialect_info = _detect_dialect_head(path, encoding)
 
-    # I_strict = C/N (种子门); I = (C+P)/N (官方退化曲线)。
-    I_strict = C / N if N > 0 else 0.0
-    I = (C + P) / N if N > 0 else 0.0
+    # 范围内零语句 (整文件无 CREATE TABLE / INSERT INTO) → tier3。
+    if N == 0:
+        return Grade(tier=3, I=0.0, fmt="sql", encoding=encoding,
+                     I_strict=0.0,
+                     n_detail=_merge_detail(dialect_info, scan, C, P, L, n_ignored),
+                     note="no CREATE/INSERT statements found")
 
-    # tier 由 I_strict / I 共同决定 (不再由单一容错路径铸造)。
+    # I_strict = C/N (种子门, N=范围内语句); I = (C+P)/N (官方退化曲线)。
+    I_strict = C / N
+    I = (C + P) / N
+
+    # tier 由 I_strict / I 共同决定。范围内全截断 (C=0,P=0) → I=0 → tier3。
     if I_strict == 1.0:
         tier = 1
     elif I > 0.0:
@@ -117,14 +130,7 @@ def parse_sql_text(path: str, encoding: str) -> Grade:
     else:
         tier = 3
 
-    # 若整文件抽不出任何 CREATE/INSERT (C==0 ∧ P==0), 沿用旧语义记 tier3。
-    if C == 0 and P == 0:
-        return Grade(tier=3, I=0.0, fmt="sql", encoding=encoding,
-                     I_strict=0.0,
-                     n_detail=_merge_detail(dialect_info, scan, C, P, L),
-                     note="no CREATE/INSERT statements found")
-
-    n_detail = _merge_detail(dialect_info, scan, C, P, L)
+    n_detail = _merge_detail(dialect_info, scan, C, P, L, n_ignored)
     note = None
     if tier != 1:
         # 形式层破坏摘要 (结构化, 不落原文)。
@@ -149,14 +155,21 @@ def parse_sql_text(path: str, encoding: str) -> Grade:
                  note=note)
 
 
-def _merge_detail(dialect_info: dict, scan, C: int, P: int, L: int) -> dict:
-    """合并方言元数据 + scan 计数细节 (结构化, 不含 SQL 原文)。"""
+def _merge_detail(dialect_info: dict, scan, C: int, P: int, L: int, n_ignored: int = 0) -> dict:
+    """合并方言元数据 + scan 计数细节 (结构化, 不含 SQL 原文)。
+
+    n_total/n_balanced/n_truncated/n_unbalanced = scan 层 (全部语句, 文件健康);
+    n_scope/c/p/l = 范围内 (CREATE TABLE / INSERT INTO) 的 C/P/L 会计;
+    n_ignored = 出范围脚手架语句数。I_strict/I 只由 n_scope 口径算。
+    """
     d = dict(dialect_info)
     d.update({
         "n_total": scan.n_total,
+        "n_scope": C + P + L,
         "c_count": C,
         "p_count": P,
         "l_count": L,
+        "n_ignored": n_ignored,
         "n_balanced": scan.n_balanced,
         "n_truncated": scan.n_truncated,
         "n_unbalanced": scan.n_unbalanced,

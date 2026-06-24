@@ -19,6 +19,7 @@ from src.sniff.profiler import profile_corpus
 from src.sniff.sniffer import sniff_file
 from src.parse.grade import grade_parse, grade_from_summary
 from src.extract.extractor import stream_schema_units, finalize_from_units
+from src.extract.schema_dedup import dedup_csv_schemas
 from src.extract.schema_unit import set_unit_counter
 from src.utils.file_utils import walk_files, extension
 from src.utils.jsonl import append_jsonl, iter_jsonl, count_lines
@@ -265,7 +266,16 @@ def _run_extract_stream(grades_path: Path, output_dir: str, field_mode: str, res
     # Pass2: 两遍流式读 units → 聚合 + 词表
     vocab_table, global_view = finalize_from_units(lambda: iter_jsonl(units_path))
     global_view["partition_total"] = count_lines(units_path)
-    return vocab_table, global_view, units_path
+
+    # Pass3 (Q2): CSV schema 级去重（语料级后处理，流式读 units → quote 感知指纹聚类）。
+    # dedup-with-multiplicity：每簇留代表 + cluster_size 频率权重，不改 schema_units.jsonl。
+    csv_dedup = dedup_csv_schemas(iter_jsonl(units_path))
+    global_view["csv_dedup"] = {
+        "total_csv_units":  csv_dedup["total_csv_units"],
+        "exact_buckets":    csv_dedup["exact_buckets"],
+        "distinct_schemas": csv_dedup["distinct_schemas"],
+    }
+    return vocab_table, global_view, units_path, csv_dedup
 
 
 def cmd_extract(args):
@@ -284,7 +294,7 @@ def cmd_extract(args):
     _stream_grades(files, grades_path, args.restart)      # 阶段1：确保 grades.jsonl 就绪（可续跑）
 
     field_mode = getattr(args, "field_mode", "template")
-    vocab_table, global_view, units_path = _run_extract_stream(
+    vocab_table, global_view, units_path, csv_dedup = _run_extract_stream(
         grades_path, args.output_dir, field_mode, args.restart,
         sample_mode=_sample_mode_from_args(args),
     )
@@ -297,6 +307,7 @@ def cmd_extract(args):
         "vocab_table.json",
         args.output_dir,
     )
+    _save_output(csv_dedup, "csv_dedup_report.json", args.output_dir)
     log.info("  schema_units 已流式写入: %s", units_path)
 
 
@@ -351,8 +362,9 @@ def cmd_pipeline(args):
     # 阶段2：流式提取
     log.info("── 阶段2: 五类信息提取（流式 schema_units.jsonl）──")
     field_mode = getattr(args, "field_mode", "template")
+    csv_dedup = None
     if c["tier1"]:
-        vocab_table, global_view, units_path = _run_extract_stream(
+        vocab_table, global_view, units_path, csv_dedup = _run_extract_stream(
             grades_path, args.output_dir, field_mode, args.restart,
             sample_mode=_sample_mode_from_args(args),
         )
@@ -392,6 +404,8 @@ def cmd_pipeline(args):
         args.output_dir,
     )
     _save_output(pipeline_result, "pipeline_report.json", args.output_dir)
+    if csv_dedup is not None:
+        _save_output(csv_dedup, "csv_dedup_report.json", args.output_dir)
     log.info("全流水线完成, 总耗时: %.1fs", total_elapsed)
     log.info("  schema_units 已流式写入: %s", units_path)
 

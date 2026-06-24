@@ -322,6 +322,79 @@ def gen_binary_files(out: Path):
 
 
 # ════════════════════════════════════════════════════════════════
+# Q2: CSV schema 去重测试集 (独立目录, 可复现, 带 seed)
+# ════════════════════════════════════════════════════════════════
+
+CSV_DEDUP_DIR = "test_data/csv_dedup_samples"
+
+
+def _w_csv(path: Path, rows: list):
+    """quote 感知写 CSV (csv.writer, RFC4180 引号转义)。"""
+    import csv as _csv
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        _csv.writer(f).writerows(rows)
+
+
+def gen_csv_dedup_samples(out_root: Path):
+    """生成 Q2 CSV schema 去重测试集 —— 可复现, 覆盖三类:
+
+      A. split-dump 家族 (有列名): carriers + _1.._4 同表头 → 应折叠成 1 簇(size=5)。
+      B. 无列名编号文件 (1.csv..6.csv): 同值结构、含空 cell 的 null 多态 → 折叠成 1 簇。
+      C. 真 singleton: 列结构各异, 不该被误并。
+
+    随机只用于填值 (不影响 schema 指纹), 由全局 random.seed 控制可复现。
+    """
+    rng = random.Random(20240624)
+    out_root.mkdir(parents=True, exist_ok=True)
+
+    # ── A. split-dump 家族: 同表头, 5 个文件 (carriers + _1.._4) ──
+    carriers_header = ["ad_line_carrier_id", "ad_line_id", "carrier"]
+    carriers = ["AT&T", "Verizon", "T-Mobile", "Sprint", "Vodafone"]
+    for suffix in ["", "_1", "_2", "_3", "_4"]:
+        rows = [carriers_header]
+        for _ in range(rng.randint(3, 6)):
+            rows.append([rng.randint(300000, 399999),
+                         rng.randint(300000, 399999),
+                         rng.choice(carriers)])
+        _w_csv(out_root / f"ad_line_carriers{suffix}.csv", rows)
+
+    # ── A2. 第二个 split-dump 家族 (devices + _1.._3, 不同表头) ──
+    dev_header = ["ad_line_device_id", "ad_line_id", "device", "min_version"]
+    devices = ["iPhone", "Pixel", "Galaxy", "iPad"]
+    for suffix in ["", "_1", "_2"]:
+        rows = [dev_header]
+        for _ in range(rng.randint(3, 5)):
+            rows.append([rng.randint(1, 9999), rng.randint(1, 9999),
+                         rng.choice(devices), f"{rng.randint(1,15)}.0"])
+        _w_csv(out_root / f"ad_line_devices{suffix}.csv", rows)
+
+    # ── B. 无列名编号文件: 6 个, 同值结构 (id,email,name,phone), 含空 cell 多态 ──
+    #     某些行中间列恰好空 → null 多态在列层重演; 空当通配后应折叠成 1 簇。
+    emails = ["a@x.com", "b@y.org", "c@z.net"]
+    names = ["MOHAMED", "RAFIQ", "SINGH", "KUMAR"]
+    for i in range(1, 7):
+        rows = []
+        for _ in range(rng.randint(4, 7)):
+            # 第 3 列 (name) 在部分文件/行随机置空 → 制造列层 null 多态
+            name = rng.choice(names) if rng.random() > 0.4 else ""
+            phone = str(rng.randint(9000000000, 9999999999)) if rng.random() > 0.3 else ""
+            rows.append([rng.randint(2900000, 2999999),
+                         rng.choice(emails), name, phone])
+        _w_csv(out_root / f"{i}.csv", rows)
+
+    # ── C. 真 singleton: 三个列结构各异的文件, 不该被误并 ──
+    _w_csv(out_root / "report_two_col.csv",
+           [["metric", "value"], ["impressions", "1024"], ["clicks", "57"]])
+    _w_csv(out_root / "ad_groups_five_col.csv",
+           [["id", "name", "status", "budget", "created_at"],
+            [1, "grp-a", "active", "100.0", "2024-01-02"],
+            [2, "grp-b", "paused", "50.0", "2024-03-04"]])
+    # 无列名 singleton: 列数与 B 族不同 (5 列), 不应并入 B
+    _w_csv(out_root / "lonely_headerless.csv",
+           [[rng.randint(1, 99), "x", "y", "z", rng.randint(1, 99)] for _ in range(4)])
+
+
+# ════════════════════════════════════════════════════════════════
 # 主入口
 # ════════════════════════════════════════════════════════════════
 
@@ -365,6 +438,15 @@ def main():
 
     count = len(list(out.iterdir()))
     print(f"\n总计生成 {count} 个测试文件")
+
+    # Q2 CSV schema 去重测试集 (独立目录, 不混入 samples 矩阵)
+    csv_out = Path(CSV_DEDUP_DIR)
+    try:
+        gen_csv_dedup_samples(csv_out)
+        n_csv = len(list(csv_out.glob("*.csv")))
+        print(f"  [OK] csv_dedup_samples → {csv_out} ({n_csv} 个 CSV)")
+    except Exception as e:
+        print(f"  [FAIL] csv_dedup_samples: {e}")
 
 
 if __name__ == "__main__":

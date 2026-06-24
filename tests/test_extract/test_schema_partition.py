@@ -84,13 +84,22 @@ class TestJsonExplicitKey:
         assert len(records) == 3
         assert records[0]["order_id"] == "OD001"
 
-    def test_partition_fields_initialized_empty(self, fixtures_dir):
+    def test_partition_field_paths_initialized_empty(self, fixtures_dir):
         grade = _make_grade(str(fixtures_dir / "explicit_keys.json"), "json")
         parts, _ = partition_file(grade)
 
+        # field_paths 仍由 build_schema_unit 回填；occurrence 已由 union-schema 聚类填真值。
         for p in parts:
             assert p["field_paths"] == set()
-            assert p["occurrence"] == {}
+
+    def test_partition_occurrence_populated(self, fixtures_dir):
+        grade = _make_grade(str(fixtures_dir / "explicit_keys.json"), "json")
+        parts, _ = partition_file(grade)
+
+        # 全字段在每条记录都出现 → presence-rate == 1.0（union-schema 真值，非占位）。
+        users_part = next(p for p in parts if p["partition_id"] == "users")
+        assert users_part["occurrence"]  # 非空
+        assert all(v == 1.0 for v in users_part["occurrence"].values())
 
     def test_format_is_json(self, fixtures_dir):
         grade = _make_grade(str(fixtures_dir / "explicit_keys.json"), "json")
@@ -102,34 +111,39 @@ class TestJsonExplicitKey:
 
 # ── JSON: 骨架聚类兜底 ────────────────────────────────────────────────────────
 
-class TestJsonSkeletonCluster:
-    def test_two_skeletons_produce_two_partitions(self, fixtures_dir):
+class TestJsonUnionSchema:
+    """union-schema 兼容性合并（Q1）：可选/缺键不分片；共享路径真冲突才分。"""
+
+    def test_disjoint_keys_merge_into_one(self, fixtures_dir):
+        # array_mixed: users(id/name/email) 与 products(product_id/price/category)
+        # 键集不相交、无共享路径冲突 → union-schema 合并为 1（消除签名爆炸的核心）。
         grade = _make_grade(str(fixtures_dir / "array_mixed.json"), "json")
         parts, stats = partition_file(grade)
 
-        assert len(parts) == 2
-        assert stats["method"] == "skeleton_cluster"
+        assert len(parts) == 1
+        assert stats["method"] == "union_schema"
 
-    def test_partition_ids_start_with_sig(self, fixtures_dir):
+    def test_partition_ids_start_with_uni(self, fixtures_dir):
         grade = _make_grade(str(fixtures_dir / "array_mixed.json"), "json")
         parts, _ = partition_file(grade)
 
         for p in parts:
-            assert p["partition_id"].startswith("sig_")
-            assert len(p["partition_id"]) == 12  # "sig_" + 8 hex chars
+            assert p["partition_id"].startswith("uni_")
 
-    def test_records_grouped_by_schema(self, fixtures_dir):
-        grade = _make_grade(str(fixtures_dir / "array_mixed.json"), "json")
-        parts, _ = partition_file(grade)
+    def test_shared_path_conflict_splits_into_two(self, fixtures_dir):
+        # array_conflict: 两族都有 'id'，但一族 id 为 str、另一族为 num → 真冲突 → 分 2。
+        grade = _make_grade(str(fixtures_dir / "array_conflict.json"), "json")
+        parts, stats = partition_file(grade)
 
-        all_keys = set()
+        assert len(parts) == 2
+        assert stats["method"] == "union_schema"
+        key_sets = []
         for p in parts:
             records = _consume(p)
-            for rec in records:
-                all_keys.update(rec.keys())
-
-        assert "name" in all_keys
-        assert "price" in all_keys
+            key_sets.append(set().union(*[set(r.keys()) for r in records]))
+        # 一族含 email（users）、另一族含 amount（orders）
+        assert any("email" in ks for ks in key_sets)
+        assert any("amount" in ks for ks in key_sets)
 
     def test_noisy_flag_is_false(self, fixtures_dir):
         grade = _make_grade(str(fixtures_dir / "array_mixed.json"), "json")
@@ -147,7 +161,7 @@ class TestJsonl:
         parts, stats = partition_file(grade)
 
         assert len(parts) == 1
-        assert stats["method"] == "skeleton_cluster"
+        assert stats["method"] == "union_schema"
 
     def test_all_records_loaded(self, fixtures_dir):
         grade = _make_grade(str(fixtures_dir / "users.jsonl"), "jsonl")

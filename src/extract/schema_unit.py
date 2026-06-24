@@ -107,6 +107,10 @@ def build_schema_unit(
     noisy = partition.get("noisy", False)
     topology: Dict = {} if noisy else _build_topology_folded(backbone)
 
+    # union-schema 聚类回填的每字段 presence-rate（叶路径粒度，由 schema_partition
+    # 的 UnionSchemaClusterer 算出）。JSON/JSONL 走此真值；其它格式为空 → 兜底 1.0。
+    occ_map: Dict[str, float] = partition.get("occurrence") or {}
+
     # 7. 信息二/三/五：在主干路径上组装 field_info（不依赖 build_vocabulary）
     fields: Dict[str, FieldInfo] = {}
     field_seq = 0
@@ -126,8 +130,8 @@ def build_schema_unit(
             if values else {}
         )
 
-        # occurrence：保留占位符 1.0（真值随 optional_field_grouping 一并落地）
-        occ = 1.0
+        # occurrence：union-schema 聚类的真值 presence-rate；缺则占位 1.0。
+        occ = occ_map.get(path, 1.0)
 
         # 信息五：PII 种子
         pii = _pii_for_field(key_name, values)
@@ -141,9 +145,9 @@ def build_schema_unit(
             "pii_seed":      pii,
         }
 
-    # 回填 partition 的 field_paths 和 occurrence（占位 1.0）
+    # 回填 partition 的 field_paths 和 occurrence（保留聚类真值，缺则补 1.0）
     partition["field_paths"] = set(fields.keys())
-    partition["occurrence"] = {p: 1.0 for p in fields}
+    partition["occurrence"] = {p: fields[p]["occurrence"] for p in fields}
 
     log.debug("build_schema_unit %s [%s] mode=%s: 采样 %d 条, B=%d, 字段 %d 个",
               unit_id, partition["partition_id"], mode,

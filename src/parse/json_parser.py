@@ -5,7 +5,11 @@ import json
 from pathlib import Path
 
 from src.parse.grade import Grade
-from src.parse.json_recovery import looks_like_jsonl_path, tolerant_load_text
+from src.parse.json_recovery import (
+    looks_like_jsonl_path,
+    stream_concatenated_json_records,
+    tolerant_load_text,
+)
 from src.utils.encoding import safe_decode
 from src.utils.file_utils import count_lines, read_head_bytes
 from src.utils.logger import get_logger
@@ -91,7 +95,35 @@ def parse_json(path: str, encoding: str) -> Grade:
             grade.note = "JSONL-as-.json recovered"
         return grade
 
+    # ── 拼接的多个顶层值 / 缺外括号的数组体 (test2.json 型: `},\n{` 分隔) ──
+    # 流式增量恢复 (raw_decode 逐值), 撞坏尾即停 → 容错路径封顶 tier2, 不漏进种子库。
+    concat = _concatenated_recovery(path, encoding)
+    if concat is not None:
+        return concat
+
     return _json_tolerant(path, encoding, text, "no items from ijson streaming")
+
+
+def _concatenated_recovery(path: str, encoding: str) -> Grade | None:
+    """流式增量恢复拼接顶层值；恢复出 >=1 条记录则给 tier2 (容错封顶)，否则 None。
+
+    与 ijson 部分恢复同语义 (C/P/L): 恢复出的计 P (可信修复)、I_strict=0 (严格侧零通过),
+    故绝不给 tier1。这里不区分崩溃点之后的 L (raw_decode 撞坏即停, 已恢复部分即 P)。
+    """
+    recovered = 0
+    for _rec in stream_concatenated_json_records(path, encoding):
+        recovered += 1
+        if recovered >= 2000:        # 计数封顶, 避免大文件全量 (只为定 tier/估 I)
+            break
+    if recovered == 0:
+        return None
+    log.debug("JSON %s: 顶层数组零记录, 流式增量恢复出 %d 条 (拼接顶层值) → tier2", path, recovered)
+    return Grade(
+        tier=2, I=1.0, I_strict=0.0, fmt="json", encoding=encoding,
+        parsed={"type": "json", "tolerant": True, "concatenated": True, "units": recovered},
+        n_form="concatenated_values",
+        note=f"concatenated top-level values recovered, {recovered}+ items (I_strict=0)",
+    )
 
 
 def _ijson_count_items(path: str) -> tuple:

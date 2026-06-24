@@ -71,3 +71,24 @@ class KeyEntry(TypedDict):
     field_id: str
     value_profile: Dict[str, Any]
     pii_seed: Optional[Tuple[str, Optional[str]]]
+
+
+# ── CSV schema 去重（Q2，跨文件语料级后处理）──────────────────────────────────
+# schema_dedup.dedup_csv_schemas() 产出：每个簇留 1 个代表 + cluster_size 频率权重。
+# dedup-with-multiplicity：训练吃 distinct schema，标定用真实频率。
+class CsvSchemaCluster(TypedDict):
+    cluster_id: str                     # "csv_clu_{N:03d}"
+    representative: str                 # 代表 SchemaUnit id（簇内首个）
+    representative_file: str            # 代表源文件路径
+    has_header: bool                    # True=表头指纹 / False=无列名 value-profile 指纹
+    fingerprint: str                    # 可读指纹描述（HEADER cols / NOHEADER valsig）
+    cluster_size: int                   # 簇内文件数（频率权重）
+    members: List[str]                  # 簇内全部 SchemaUnit id
+    member_files: List[str]             # 簇内全部源文件路径
+
+
+class CsvDedupReport(TypedDict):
+    total_csv_units: int                # 参与去重的 CSV/TSV SchemaUnit 总数
+    exact_buckets: int                  # 精确指纹桶数（兼容合并前）
+    distinct_schemas: int               # 兼容合并后 distinct schema 数
+    clusters: List[CsvSchemaCluster]

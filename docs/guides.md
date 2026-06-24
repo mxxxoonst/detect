@@ -305,9 +305,10 @@ grades.jsonl(tier1) ──► stream_schema_units()  逐文件 partition→build
 - **B**（value 画像相似，`profile_similarity`，阈值 0.7）+ **C**（PII 类型一致）→ Union-Find 粗聚类；
 - **A**（字符串相似度，`SequenceMatcher`）→ 簇内校正 / 冲突检测（<0.45 标 uncertain）。
 
-`profile_similarity` 当前为占位实现且**已错配**：它读单值键 `type`，而聚合后的 value_profile 没有
-该键 → B 证据恒返回 0.0；其上的 `_initial_clusters_by_bc` 又是 O(n²) 全字段两两比且无日志，是阶段2
-Pass2 **卡死的直接原因**。真实多维加权 + 分块/LSH 近线性化 + 立即止血护栏见 `todo_list.md` 待完成项 7。
+B 证据聚类已从 O(n²) 全字段两两比改为 **`(type, len_band)` 分桶 blocking**（`_profile_bucket_key`，近线性）——
+真实语料上跨全部 unit 的字段数可达百万，旧全配对是阶段2 Pass2 **历史卡死的直接原因**，现已止血。
+`profile_similarity` 保留为 helper（占位语义），真实多维加权度量见 `todo_list.md` 待完成项 7。
+> ⚠ 注：vocab_table 是**全局跨表分析产物**，**不属于** IR 单元（§4.7）；建 IR 数据集时此步整段不跑。
 
 ---
 
@@ -353,6 +354,39 @@ Pass2 **卡死的直接原因**。真实多维加权 + 分块/LSH 近线性化 +
 
 > `profile_similarity`（§4.5）的真实度量将复用 `avg_char_dist`（合法概率分布，可做余弦/JSD）、
 > `len_dist`、`top_patterns`（Jaccard）、`avg_scripts`——见 `todo_list.md` 待完成项 7.3。
+
+---
+
+## 4.7 IR 数据集单元（喂给鲁棒编码器的输入投影）
+
+研究目标是训练**结构鲁棒编码器**：把噪声异构记录编码成表征供 PII 检测 / schema 理解。喂给编码器的
+**每单元 IR** 不是 §4.4 的全部五类信息，而是其中「输入 x」那一子集。SchemaUnit 是承载体，**IR 单元 =
+SchemaUnit 的投影**，逐文件流式产出（`stream_schema_units` → `schema_units.jsonl`），**不做全局 join**。
+
+| 槽位 | 来源 | 取舍 |
+|------|------|------|
+| 身份/溯源 `id`/`source_file`/`partition_id`/`format`/`record_count` | SchemaUnit 自带 | 保留：廉价且必需（per-unit 去重 / 加权 / 溯源） |
+| **结构** `skeleton` + `skeleton_counts` | 信息一 | 核心 x。**嵌套已编码在折叠路径里**（`orders[].amt`），拓扑是它的派生视图 |
+| **拓扑** `topology` | 信息四 | 与骨架冗余：编码器若直接吃路径串可省；需显式喂树结构再留 |
+| **值证据** `fields[path].samples` | 信息三的**样本通道** | **直接用值样本**（见下），不用统计画像作输入 |
+| ~~字段名词表 vocab_table~~ | 信息二 | **删**：全局跨表 join，非单元 IR；也是 Pass2 历史卡死那步（§4.5） |
+| PII 种子 `pii_seed` | 信息五 | 可选**弱标签通道**（是 y 不是 x），由 key 名+样本派生、可后算；建 IR 时可不带 |
+
+**值证据 = 值样本（本研究决定）**：不以 §4.6 的统计画像（`len_dist`/`avg_char_dist`/…）作编码器输入，而是
+**直接保留样本值**——让编码器从原始样本自学「这像 email / 身份证 / 时间戳」，比预聚合分布更利于鲁棒表征。
+落地复用 `aggregate_profiles` 的样本通道（§4.6），**建 IR 必须显式开 `--keep-samples`**（默认 `off` 不产样本、不适用于 IR）：
+- `sample_mode="raw"`（`--keep-samples`）：按 `pattern` 去重留 ≤5 个代表样本（优先覆盖不同 pattern 类别）。
+- `sample_mode="masked"`（`--keep-samples --mask-samples`，**推荐**）：保留长度/分隔符/字符宏类、内容字符打码
+  （`user@ex.com`→`****@*****.***`），既给编码器形态信号又守 PII 红线（owner 授权下可换 `raw`）。
+
+**与 pipeline 的关系**：删信息二后，阶段2 退化为纯逐文件流式——`stream_schema_units` 产出的
+`schema_units.jsonl` **就是 IR 数据集**；`finalize_from_units` 的全局 `vocab_table`/`global_view` 是语料
+分析产物、非编码器输入，建 IR 时整段不跑，跨单元聚类的固有成本随之消失。
+
+**训练 vs 推理（同一套解析器、不同门控）**：
+- 建训练集：只取 tier1（`I_strict==1`）干净种子投影成 IR（干净 x，噪声靠合成增广）。
+- 推理：输入是真实噪声，走**容错通道**把 (C+P) 恢复进 IR、L 残片标 `[RAW]`，**不走 tier1 过滤**
+  （严格门只为选训练种子，不参与单样本编码）。
 
 ---
 

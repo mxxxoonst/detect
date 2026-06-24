@@ -22,12 +22,16 @@ def parse_tsv(path: str, encoding: str) -> Grade:
 
 
 def _read_rows(path: str, encoding: str, sep: str):
-    """quote-aware 流式读非空行, 返回 (col_counts, headers, read_error)。
+    """quote-aware 流式读非空行, 返回 (raw_lens, core_lens, headers, read_error)。
 
     用 csv.reader (RFC 4180: 尊重引号内分隔符/换行/`""` 转义), 禁 split(sep)。
+    - raw_lens: 每行原始列数。
+    - core_lens: 每行去掉**尾部连续空单元**后的列数 (末个非空单元下标+1)。
+      用于把"行尾多余逗号"(trailing comma → 空的幻影尾列) 与真实结构漂移区分开。
     read_error: reader 中途抛异常时为该异常 (部分行已读), 否则 None。
     """
-    col_counts: list[int] = []
+    raw_lens: list[int] = []
+    core_lens: list[int] = []
     headers = None
     read_error = None
     try:
@@ -36,24 +40,31 @@ def _read_rows(path: str, encoding: str, sep: str):
             for row in reader:
                 if not row or all(cell.strip() == "" for cell in row):
                     continue
-                col_counts.append(len(row))
+                raw_lens.append(len(row))
+                core_lens.append(_core_len(row))
                 if headers is None:
                     headers = row
     except Exception as e:
         read_error = e
-    return col_counts, headers, read_error
+    return raw_lens, core_lens, headers, read_error
 
 
-def _strict_ok_csv(col_counts: list) -> bool:
-    """严格谓词: quote-aware reader 无错 ∧ 列数全等 ∧ 至少 1 列。
+def _core_len(row: list) -> int:
+    """去掉尾部连续空单元后的列数 (末个非空单元下标+1; 全空→0)。"""
+    i = len(row)
+    while i > 0 and row[i - 1].strip() == "":
+        i -= 1
+    return i
 
-    调用方保证 col_counts 来自 csv.reader (已 quote-aware) 且 read_error is None。
-    `strict_ok ⟺ I_strict==1 ⟺ 列全等` (命门: 与容错零偏离一致)。
+
+def _row_clean(raw: int, core: int, width: int) -> bool:
+    """行是否与 schema 等宽 (trailing-comma 容忍)。
+
+    干净 ⟺ 原始列数等于 schema 宽度 (raw==width),
+        或仅**多出空的尾列** (raw>width ∧ core<=width, 即超宽部分全空 = 行尾逗号)。
+    raw<width (缺尾字段) 或 raw>width 且尾列非空 (内嵌分隔符把真实值推过宽度) → 不干净。
     """
-    if not col_counts:
-        return False
-    ncols = col_counts[0]
-    return ncols >= 1 and all(c == ncols for c in col_counts)
+    return raw == width or (raw > width and core <= width)
 
 
 def _parse_delimited(path: str, encoding: str, sep: str, fmt: str) -> Grade:
@@ -65,8 +76,8 @@ def _parse_delimited(path: str, encoding: str, sep: str, fmt: str) -> Grade:
       L = reader 直接丢的行 (读中断后未读到的部分)。
     I_strict = 列全等 ? 1.0 : C/N (modal_consistent/total)；I = (C+P)/N。
     """
-    col_counts, headers, read_error = _read_rows(path, encoding, sep)
-    total_rows = len(col_counts)
+    raw_lens, core_lens, headers, read_error = _read_rows(path, encoding, sep)
+    total_rows = len(raw_lens)
 
     if total_rows == 0:
         if read_error is not None:
@@ -75,16 +86,23 @@ def _parse_delimited(path: str, encoding: str, sep: str, fmt: str) -> Grade:
                          error=str(read_error))
         return Grade(tier=3, I=0.0, I_strict=0.0, fmt=fmt, encoding=encoding, note="empty file")
 
-    # ── strict 谓词: reader 无错 ∧ 列全等 → tier1 (I_strict==1) ──
-    if read_error is None and _strict_ok_csv(col_counts):
-        ncols = col_counts[0]
-        return Grade(tier=1, I=1.0, I_strict=1.0, fmt=fmt, encoding=encoding,
-                     parsed={"type": fmt, "headers": headers, "rows": total_rows, "columns": ncols})
+    # schema 宽度 = 众数列数 (数据共识, 不被坍塌表头带偏); 行清洁判定带 trailing-comma 容忍。
+    modal = Counter(raw_lens).most_common(1)[0][0]
+    width = modal
+    clean_flags = [_row_clean(r, c, width) for r, c in zip(raw_lens, core_lens)]
+    trailing_comma_rows = sum(
+        1 for r, c, ok in zip(raw_lens, core_lens, clean_flags) if ok and r > width
+    )
 
-    # ── tolerant: 列漂移 / reader 中断 → 按众数重对齐, 计 C/P/L ──
-    modal = Counter(col_counts).most_common(1)[0][0]
-    C = sum(1 for c in col_counts if c == modal)        # 众数列且成行 → clean
-    P = total_rows - C                                  # 偏离众数但成行 → repaired
+    # ── strict 谓词: reader 无错 ∧ 每行等宽(容忍空尾列) → tier1 (I_strict==1) ──
+    if read_error is None and width >= 1 and all(clean_flags):
+        return Grade(tier=1, I=1.0, I_strict=1.0, fmt=fmt, encoding=encoding,
+                     parsed={"type": fmt, "headers": headers, "rows": total_rows,
+                             "columns": width, "trailing_comma_rows": trailing_comma_rows})
+
+    # ── tolerant: 真实列漂移 / reader 中断 → 计 C/P/L ──
+    C = sum(clean_flags)                                # 等宽(容忍空尾列) → clean
+    P = total_rows - C                                  # 真实偏离(缺字段/内嵌分隔符) → repaired
     # reader 中断: 已读 total_rows 行成行, 未读到的部分为 L (无从知数, 至少 1)。
     L = 1 if read_error is not None else 0
     N = total_rows + L
@@ -93,8 +111,8 @@ def _parse_delimited(path: str, encoding: str, sep: str, fmt: str) -> Grade:
     I = (C + P) / N
     tier = 2 if I > 0.0 else 3
 
-    drift = _column_drift(col_counts)
-    header_cols = col_counts[0]
+    drift = _column_drift(raw_lens)
+    header_cols = raw_lens[0]
     modal_frac = C / total_rows
     if read_error is not None:
         kind = "read_interrupted"
@@ -106,7 +124,7 @@ def _parse_delimited(path: str, encoding: str, sep: str, fmt: str) -> Grade:
 
     n_detail = {"kind": kind, "drift": round(drift, 4),
                 "modal_cols": modal, "header_cols": header_cols,
-                "col_hist": _col_hist(col_counts),
+                "col_hist": _col_hist(raw_lens),
                 "c_count": C, "p_count": P, "l_count": L, "n_total": N}
     if read_error is not None:
         n_detail["reason"] = str(read_error)[:200]

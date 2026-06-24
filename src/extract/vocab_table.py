@@ -7,10 +7,11 @@
   A (字符串相似度)                       → 簇内校正 / 冲突检测
 """
 
+import math
 import re
 from collections import Counter, defaultdict
 from difflib import SequenceMatcher
-from typing import Dict, List,  Tuple
+from typing import Dict, List, Optional, Tuple
 
 from src.extract.schema_types import KeyEntry, SchemaUnit, VocabTable
 from src.utils.logger import get_logger
@@ -18,8 +19,9 @@ from src.utils.logger import get_logger
 log = get_logger(__name__)
 
 # 阈值常量
-_PROFILE_SIM_THRESHOLD = 0.7   # value 画像相似度 ≥ 此值视为同义
+_PROFILE_SIM_THRESHOLD = 0.7   # value 画像相似度 ≥ 此值视为同义（_profile_bucket_key 的 len_band 近似它）
 _STR_SPLIT_THRESHOLD   = 0.45  # 字符串相似度 < 此值时标记冲突（uncertain）
+_LEN_BAND_BASE         = 2.0   # 长度均值对数分桶底；2.5× 差距≈跨 ~1.3 桶（近似 0.7 阈值的 2.5× 比）
 
 
 # ── 公开接口 ──────────────────────────────────────────────────────────────────
@@ -98,22 +100,25 @@ def _initial_clusters_by_bc(entries: List[KeyEntry]) -> List[List[int]]:
         for j in range(1, len(idxs)):
             union(idxs[0], idxs[j])
 
-    # B: 同一 SchemaUnit 内不做跨字段合并（防止误聚）
-    # 只对不同 schema_unit_id 之间的字段做画像相似判断
+    # B: 画像相似聚类 —— 用「分桶 blocking」替代全配对 O(N²)。
+    #    real corpus 上 N（跨全部 unit 的字段数）可达百万，全配对会卡死
+    #    （见 build_vocab_table 卡在 _initial_clusters_by_bc 的 find()）。
+    #    桶键 = (type, len_band)，不同 type 永不同桶（保留 profile_similarity 的硬 0.0 规则）。
+    #    只合并「含 ≥2 个不同 schema_unit 的桶」：单一 schema_unit 的桶不并（防止同表误聚，
+    #    与原「同表字段不因画像相似而合并」一致）；桶内跨表的并查集传递闭包等价于原全配对结果。
     su_by_idx = {i: e["schema_unit_id"] for i, e in enumerate(entries)}
+    profile_buckets: Dict[tuple, List[int]] = defaultdict(list)
+    for i, e in enumerate(entries):
+        key = _profile_bucket_key(e["value_profile"])
+        if key is not None:
+            profile_buckets[key].append(i)
 
-    for i in range(n):
-        for j in range(i + 1, n):
-            if find(i) == find(j):
-                continue
-            if su_by_idx[i] == su_by_idx[j]:
-                continue  # 同表字段不因画像相似而合并
-            sim = profile_similarity(
-                entries[i]["value_profile"],
-                entries[j]["value_profile"],
-            )
-            if sim >= _PROFILE_SIM_THRESHOLD:
-                union(i, j)
+    for idxs in profile_buckets.values():
+        if len({su_by_idx[i] for i in idxs}) < 2:
+            continue  # 单一 schema_unit 的桶不合并
+        base = idxs[0]
+        for k in idxs[1:]:
+            union(base, k)
 
     groups: Dict[int, list] = defaultdict(list)
     for i in range(n):
@@ -197,6 +202,25 @@ def _string_similarity(s1: str, s2: str) -> float:
     if not n1 or not n2:
         return 0.0
     return SequenceMatcher(None, n1, n2).ratio()
+
+
+def _profile_bucket_key(vp: Dict) -> Optional[tuple]:
+    """B 证据分桶键，O(N) 替代全配对的 profile_similarity。
+
+    与 profile_similarity 同源：
+      - type 缺失 → None（不参与 B，等价于 sim=0.0）；
+      - 不同 type → 不同桶（永不合并，保留硬 0.0 规则）；
+      - 有 len_dist.mean>0 → (type, 对数分桶)（近似"均值在 ~2.5× 内 → sim≥0.7"）；
+      - 同 type 无长度信息 → (type, "nolen")（对应 profile_similarity 的 0.8 保守相似）。
+    """
+    t = vp.get("type", "")
+    if not t:
+        return None
+    ld = vp.get("len_dist", {})
+    mean = ld.get("mean", 0) if ld else 0
+    if mean and mean > 0:
+        return (t, round(math.log(mean + 1.0, _LEN_BAND_BASE)))
+    return (t, "nolen")
 
 
 def profile_similarity(p1: Dict, p2: Dict) -> float:

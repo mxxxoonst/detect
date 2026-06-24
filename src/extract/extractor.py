@@ -149,6 +149,19 @@ def stream_schema_units(
     return processed, pc, written, skipped
 
 
+def finalize_ir_from_units(units_iter_factory) -> Dict[str, Any]:
+    """建 IR 路径（§4.7）：只聚合 global_view，**跳过全局 vocab_table**。
+
+    vocab_table 是语料分析产物（跨表同义倒排），非「单元 IR」；构建 IR 数据集时
+    SchemaUnit 本身即投影单元（结构 skeleton + 拓扑 topology + 值证据=值样本，
+    occurrence 已由 Q1 union-schema 真值填充）。此路径省掉词表聚类，单遍流式、内存恒定。
+
+    值证据走 build_schema_unit 的 sample_mode（建 IR 推荐 "masked"），由上游 CLI
+    传入；本函数只做不依赖原值的全局聚合。
+    """
+    return _aggregate_global_view(units_iter_factory())
+
+
 def finalize_from_units(units_iter_factory) -> Tuple[VocabTable, Dict[str, Any]]:
     """Pass2：两遍流式读 schema_units.jsonl，聚合 global_view + 构建 vocab_table。
 

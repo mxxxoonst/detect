@@ -1,0 +1,7 @@
+[
+  {"id": "u-001", "name": "Alice", "email": "alice@example.com"},
+  {"id": "u-002", "name": "Bob",   "email": "bob@example.com"},
+  {"id": 1001, "amount": 99.9,  "status": "paid"},
+  {"id": 1002, "amount": 29.9,  "status": "books"},
+  {"id": 1003, "amount": 149.0, "status": "electronics"}
+]

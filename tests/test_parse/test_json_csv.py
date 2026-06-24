@@ -56,6 +56,22 @@ def test_jsonl_as_json_not_zero_yield(make_temp_file):
     assert g.I_strict == 1.0
 
 
+def test_json_concatenated_values_recovered_capped_tier2(make_temp_file):
+    # 拼接的多个顶层对象 (缺外括号 / `},\n{` 分隔, 非 JSONL 单行): 顶层无数组、
+    # 非逐行 → 流式增量恢复 (raw_decode) → 封顶 tier2, 非零产出, I_strict==0。
+    content = (
+        '  {\n    "id": 1,\n    "name": "a"\n  },\n'
+        '  {\n    "id": 2,\n    "name": "b"\n  }\n'
+    )
+    path = make_temp_file("concat.json", content)
+    g = parse_json(path, "utf-8")
+    assert g.tier == 2, f"concatenated recovery must cap at tier2, got {g.tier}"
+    assert g.I_strict == 0.0
+    assert g.parsed is not None
+    assert g.parsed.get("concatenated") is True
+    assert g.parsed.get("units", 0) >= 2, "拼接顶层值不应零产出"
+
+
 # ════════════════════════════════════════════════════════════════
 # JSONL
 # ════════════════════════════════════════════════════════════════

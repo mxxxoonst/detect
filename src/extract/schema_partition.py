@@ -8,22 +8,22 @@
 """
 
 import csv
-import hashlib
 import json
 import re
 from collections import defaultdict
 from itertools import islice
 from statistics import stdev
-from typing import Dict, Iterator, List, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple
 
 import ijson
 
 from src.constants import SAMPLE_PER_FILE, SNIFF_HEAD_BYTES
 from src.extract.schema_types import PartitionStats, SchemaPartition
-from src.extract.skeleton import structure_signature
+from src.extract.skeleton import UnionSchemaClusterer
 from src.parse.grade import Grade
 from src.parse.json_recovery import (
     looks_like_jsonl_path,
+    stream_concatenated_json_records,
     tolerant_json_records,
     tolerant_load_text,
 )
@@ -77,23 +77,24 @@ def partition_file(grade: Grade) -> Tuple[List[SchemaPartition], PartitionStats]
 # ── JSON ──────────────────────────────────────────────────────────────────────
 
 def _partition_json(path: str, encoding: str) -> Tuple[List[SchemaPartition], str]:
-    """优先检测显式包装 key，兜底骨架签名聚类。"""
+    """优先检测显式包装 key，兜底 union-schema 兼容性合并聚类。"""
     explicit = _detect_explicit_keys(path, encoding)
     if explicit:
-        parts = [
-            _make_partition(path, "json", key_name, iter(records))
-            for key_name, records in explicit.items()
-            if records
-        ]
+        parts = []
+        for key_name, records in explicit.items():
+            if not records:
+                continue
+            occ = _occurrence_from_records(records)
+            parts.append(_make_partition(path, "json", key_name, iter(records), occ))
         if parts:
             return parts, "explicit_key"
 
-    buckets = _cluster_by_skeleton_json(path, encoding)
+    buckets, occ_map = _cluster_by_skeleton_json(path, encoding)
     parts = [
-        _make_partition(path, "json", sig_id, iter(records))
+        _make_partition(path, "json", sig_id, iter(records), occ_map.get(sig_id))
         for sig_id, records in buckets.items()
     ]
-    return parts, "skeleton_cluster"
+    return parts, "union_schema"
 
 
 def _detect_explicit_keys(path: str, encoding: str) -> Dict[str, list] | None:
@@ -125,19 +126,49 @@ def _detect_explicit_keys(path: str, encoding: str) -> Dict[str, list] | None:
     return result if result else None
 
 
-def _cluster_by_skeleton_json(path: str, encoding: str = "utf-8") -> Dict[str, list]:
-    """ijson 流式读顶层数组，按 structure_signature 归桶。"""
-    buckets: Dict[str, list] = defaultdict(list)
+def _cluster_by_skeleton_json(
+    path: str, encoding: str = "utf-8"
+) -> Tuple[Dict[str, list], Dict[str, Dict[str, float]]]:
+    """ijson 流式读顶层数组，union-schema 兼容性合并聚类（消除签名爆炸）。
+
+    单遍贪心：每条记录并入第一个兼容原型（扩张并集 + 累加每字段出现计数），否则开
+    新原型。归一化只放过「可选键 / null 多态 / 空容器」伪差异，真冲突仍分开。
+    内存恒定：聚类器只持 O(原型数) 的并集 schema + 计数；每桶采样落地受
+    SAMPLE_PER_FILE 限制。返回 (buckets, occurrence_map)，桶 id 为 ``uni_00`` 序号。
+
+    Returns:
+        buckets:        {partition_id: [采样记录,...]}
+        occurrence_map: {partition_id: {叶路径: presence-rate}}
+    """
+    clusterer = UnionSchemaClusterer()
+    samples: Dict[int, list] = defaultdict(list)
 
     for rec in _stream_json_records(path, encoding):
         if not isinstance(rec, dict):
             continue
-        sig = structure_signature(rec)
-        sig_id = "sig_" + hashlib.sha256(sig.encode()).hexdigest()[:8]
-        if len(buckets[sig_id]) < SAMPLE_PER_FILE:
-            buckets[sig_id].append(rec)
+        idx = clusterer.add(rec)
+        if len(samples[idx]) < SAMPLE_PER_FILE:
+            samples[idx].append(rec)
 
-    return dict(buckets)
+    buckets: Dict[str, list] = {}
+    occ_map: Dict[str, Dict[str, float]] = {}
+    for idx in range(len(clusterer.protos)):
+        pid = f"uni_{idx:02d}"
+        buckets[pid] = samples.get(idx, [])
+        occ_map[pid] = clusterer.occurrence(idx)
+    return buckets, occ_map
+
+
+def _occurrence_from_records(records: list) -> Dict[str, float]:
+    """对一组已知同质记录（显式 key 分片）算每叶路径的 presence-rate。"""
+    clusterer = UnionSchemaClusterer()
+    for rec in records:
+        if isinstance(rec, dict):
+            clusterer.add(rec)
+    if not clusterer.protos:
+        return {}
+    # 显式 key 下视为单原型；若内部仍有真冲突分出多原型，取第一个（最大族）的近似
+    return clusterer.occurrence(0)
 
 
 def _stream_json_records(path: str, encoding: str = "utf-8") -> Iterator[dict]:
@@ -182,7 +213,17 @@ def _stream_json_records(path: str, encoding: str = "utf-8") -> Iterator[dict]:
             log.warning("JSONL-as-.json 分片读取失败 %s: %s", path, e)
         return
 
-    # ── 兜底: json 严格 → json5 容错 (共享 json_recovery 单一真源) ──
+    # ── 流式增量恢复: 拼接的多个顶层值 / 缺外括号的数组体 / pretty-print 多行对象 ──
+    # (test2.json 型: `},\n{` 分隔、尾部截断)。逐值 raw_decode, 不整文件 load。
+    concat_yielded = 0
+    for rec in stream_concatenated_json_records(path, encoding):
+        concat_yielded += 1
+        yield rec
+    if concat_yielded:
+        log.debug("JSON 分片 %s: 流式增量恢复出 %d 条 (拼接顶层值)", path, concat_yielded)
+        return
+
+    # ── 末路兜底: json 严格 → json5 容错 (GBK / 注释 / 单引号等语法噪声, 小文件) ──
     try:
         with open(path, "r", encoding=encoding, errors="replace") as f:
             text = f.read()
@@ -196,8 +237,9 @@ def _stream_json_records(path: str, encoding: str = "utf-8") -> Iterator[dict]:
 # ── JSONL ─────────────────────────────────────────────────────────────────────
 
 def _partition_jsonl(path: str, encoding: str) -> Tuple[List[SchemaPartition], str]:
-    """JSONL 无显式包装 key，直接骨架聚类。"""
-    buckets: Dict[str, list] = defaultdict(list)
+    """JSONL 无显式包装 key，逐行流式 union-schema 兼容性合并聚类。"""
+    clusterer = UnionSchemaClusterer()
+    samples: Dict[int, list] = defaultdict(list)
     bad = 0
 
     try:
@@ -214,21 +256,23 @@ def _partition_jsonl(path: str, encoding: str) -> Tuple[List[SchemaPartition], s
                 if not isinstance(rec, dict):
                     bad += 1
                     continue
-                sig = structure_signature(rec)
-                sig_id = "sig_" + hashlib.sha256(sig.encode()).hexdigest()[:8]
-                if len(buckets[sig_id]) < SAMPLE_PER_FILE:
-                    buckets[sig_id].append(rec)
+                idx = clusterer.add(rec)
+                if len(samples[idx]) < SAMPLE_PER_FILE:
+                    samples[idx].append(rec)
     except Exception as e:
         log.warning("JSONL 分片读取失败 %s: %s", path, e)
 
     if bad:
         log.debug("JSONL 分片 %s: 跳过 %d 个坏行/非 dict 行", path, bad)
 
-    parts = [
-        _make_partition(path, "jsonl", sig_id, iter(records))
-        for sig_id, records in buckets.items()
-    ]
-    return parts, "skeleton_cluster"
+    parts = []
+    for idx in range(len(clusterer.protos)):
+        pid = f"uni_{idx:02d}"
+        parts.append(
+            _make_partition(path, "jsonl", pid, iter(samples.get(idx, [])),
+                            clusterer.occurrence(idx))
+        )
+    return parts, "union_schema"
 
 
 # ── CSV / TSV ─────────────────────────────────────────────────────────────────
@@ -467,14 +511,21 @@ def _make_partition(
     fmt: str,
     partition_id: str,
     record_iter: Iterator[dict],
+    occurrence: Optional[Dict[str, float]] = None,
 ) -> SchemaPartition:
-    """构造 SchemaPartition dict。field_paths/occurrence 由 build_schema_unit 消费后回填。"""
+    """构造 SchemaPartition dict。
+
+    ``occurrence``：JSON/JSONL union-schema 聚类已算出的每字段 presence-rate（叶路径
+    粒度），由 build_schema_unit 消费回填到 SchemaUnit.fields[path].occurrence/required；
+    其它格式留空 dict（build_schema_unit 兜底占位 1.0）。``field_paths`` 仍由
+    build_schema_unit 回填。
+    """
     return {
         "source_file":  source_file,
         "format":       fmt,
         "partition_id": partition_id,
         "field_paths":  set(),
-        "occurrence":   {},
+        "occurrence":   dict(occurrence) if occurrence else {},
         "record_iter":  record_iter,
         "noisy":        False,
     }
