@@ -11,3 +11,7 @@ wheels/
 output
 test_data/DataPart
 csv_tests
+test_data/csv_dedup_samples
+test_data/TrueDataPart
+test_data/samples
+src/synth/output

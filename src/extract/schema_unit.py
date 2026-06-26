@@ -47,7 +47,8 @@ def set_unit_counter(next_value: int) -> None:
 
 
 def build_schema_unit(
-    partition: SchemaPartition, mode: str = "template", sample_mode: str = "off"
+    partition: SchemaPartition, mode: str = "template", sample_mode: str = "off",
+    compact: bool = False,
 ) -> SchemaUnit:
     """消费 partition['record_iter']，一遍遍历组装五类信息，返回 SchemaUnit。
 
@@ -56,6 +57,10 @@ def build_schema_unit(
         mode: "template"（B，默认）裁剪到 most_common 签名主干；"fold"（A）取全路径并集。
         sample_mode: 信息三样本保留方案，"off"（默认，守 PII 红线，不留原值）/
                      "raw"（留原始样本）/ "masked"（留脱敏样本）。
+        compact: 紧凑 IR 形态（--ir）。skeleton 收敛为
+                 ``{path: {depth, type, samples}}`` 的单一骨架字典——拓扑(depth)、
+                 类型、样本三合一，**丢弃** value_profile 统计画像 / 独立 topology /
+                 fields / skeleton_counts 冗余块。
 
     ⚠ record_iter 消费后不可重播。
     """
@@ -66,10 +71,10 @@ def build_schema_unit(
     su_seq = next(_UNIT_COUNTER)
     unit_id = f"sch_{su_seq:05d}"
 
-    # 空 partition 快速返回
+    # 空 partition 快速返回（上层 stream_schema_units 据 record_count==0 跳过不落 IR）
     if not records:
-        log.warning("空分片(采到 0 条记录) %s [%s] → %s",
-                    partition["source_file"], partition["partition_id"], unit_id)
+        log.debug("空分片(采到 0 条记录) %s [%s]，不落 IR",
+                  partition["source_file"], partition["partition_id"])
         return {
             "id":               unit_id,
             "source_file":      partition["source_file"],
@@ -102,6 +107,25 @@ def build_schema_unit(
     backbone, skeleton = _backbone_and_skeleton(
         mode, template_values, dtype_seen, sig_counter
     )
+
+    # 5b. 紧凑 IR（--ir）：单一 skeleton 字典 {path: {depth, type, samples}}，
+    #     拓扑(depth 由点路径深度给出，层级隐含在 path 键里)/类型/样本三合一，
+    #     不建 value_profile / 独立 topology / fields / skeleton_counts。
+    if compact:
+        skel = _compact_skeleton(backbone, skeleton, template_values, sample_mode,
+                                 partition["format"])
+        partition["field_paths"] = set(skel.keys())
+        log.debug("build_schema_unit %s [%s] compact: 采样 %d 条, 字段 %d 个",
+                  unit_id, partition["partition_id"], len(records), len(skel))
+        return {
+            "id":               unit_id,
+            "source_file":      partition["source_file"],
+            "format":           partition["format"],
+            "partition_id":     partition["partition_id"],
+            "skeleton":         skel,
+            "skeleton_count_B": skeleton_count_B,
+            "record_count":     len(records),
+        }
 
     # 6. 信息四：拓扑（裁剪到主干；noisy 标记时跳过）
     noisy = partition.get("noisy", False)
@@ -165,6 +189,43 @@ def build_schema_unit(
         "fields":           fields,
         "record_count":     len(records),
     }
+
+
+# ── 紧凑 IR skeleton（--ir）─────────────────────────────────────────────────────
+
+def _compact_skeleton(
+    backbone: set,
+    skeleton: List[Tuple],
+    template_values: Dict[str, list],
+    sample_mode: str,
+    fmt: str,
+) -> Dict[str, Dict]:
+    """组装紧凑骨架 ``{path: {depth, type, samples}}``。
+
+    - depth：JSON/JSONL 取折叠点路径深度（``path.count(".")+1``，层级隐含在 path 键里，
+      如 ``meta.geo.lat`` / ``orders[].amt``）；CSV/TSV 是平表，字段恒为 depth 1
+      （列名若含 ``.`` 不应被误判成嵌套）。
+    - type：该路径的主类型（多型取 skeleton 的 dominant dtype）。
+    - samples：按 pattern 去重的样本值（≤SAMPLE_MAX），受 sample_mode 闸门约束
+      （"off" 不留原值，守 PII 红线）。
+    """
+    tabular = fmt in ("csv", "tsv")
+    type_of = {entry[0]: entry[1] for entry in skeleton}
+    skel: Dict[str, Dict] = {}
+    for path in sorted(backbone):
+        values = template_values.get(path, [])
+        samples: list = []
+        if sample_mode != "off" and values:
+            vp = aggregate_profiles(
+                [profile_value(v) for v in values], values, sample_mode
+            )
+            samples = vp.get("samples", [])
+        skel[path] = {
+            "depth":   1 if tabular else path.count(".") + 1,
+            "type":    type_of.get(path, "null"),
+            "samples": samples,
+        }
+    return skel
 
 
 # ── 单遍折叠遍历 ────────────────────────────────────────────────────────────────

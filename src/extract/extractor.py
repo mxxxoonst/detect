@@ -72,6 +72,11 @@ def extract_all(
     return schema_units, vocab_table, global_view
 
 
+def _norm_skel_type(t: Any) -> Any:
+    """聚合用类型归一: int/float → 'num'（与 schema_dedup 同口径），其余原样。"""
+    return "num" if t in ("int", "float") else t
+
+
 def _aggregate_global_view(schema_units) -> Dict[str, Any]:
     """将所有 SchemaUnit 聚合为全局视图（接受 list 或惰性迭代器，流式增量计数）。"""
     all_skeletons: Counter = Counter()
@@ -83,12 +88,25 @@ def _aggregate_global_view(schema_units) -> Dict[str, Any]:
     for unit in schema_units:
         unit_count += 1
         total_records += unit.get("record_count", 0)
-        for sig, cnt in unit.get("skeleton_counts", {}).items():
-            all_skeletons[sig] += cnt
-        all_field_names.update(unit.get("fields", {}).keys())
-        for path, info in unit.get("fields", {}).items():
-            if info.get("pii_seed"):
-                pii_seeds_count += 1
+        counts = unit.get("skeleton_counts")
+        sk = unit.get("skeleton")
+        fields = unit.get("fields")
+        if counts:                                   # 冗长形态：逐签名计数
+            for sig, cnt in counts.items():
+                all_skeletons[sig] += cnt
+        elif isinstance(sk, dict):                   # 紧凑 IR：path + 归一 type 签名(与去重口径一致)
+            # 已去重 → 每个代表是一类 distinct schema；按 cluster_size 加权还原真实重数
+            # (你看到的 590 现在落到单一代表上，而非 590 条同质 unit)。
+            sig = "|".join(f"{p}:{_norm_skel_type(m.get('type'))}"
+                           for p, m in sorted(sk.items()))
+            all_skeletons[sig] += unit.get("cluster_size", 1)
+        if fields:                                   # 冗长形态：字段名 + PII 计数
+            all_field_names.update(fields.keys())
+            for path, info in fields.items():
+                if info.get("pii_seed"):
+                    pii_seeds_count += 1
+        elif isinstance(sk, dict):                   # 紧凑 IR：字段名取 skeleton 键
+            all_field_names.update(sk.keys())
 
     shape_B = len(all_skeletons)
     naming_A = len(all_field_names)
@@ -114,6 +132,7 @@ def stream_schema_units(
     append_unit,
     done_source_files=frozenset(),
     sample_mode: str = "off",
+    compact: bool = False,
 ) -> Tuple[int, int, int, int]:
     """Pass1：逐 tier1 Grade 分片 + 构建 SchemaUnit，经 ``append_unit`` 回调即时落盘。
 
@@ -141,7 +160,12 @@ def stream_schema_units(
         parts, _stats = partition_file(grade)
         pc += len(parts)
         for p in parts:
-            append_unit(build_schema_unit(p, mode=mode, sample_mode=sample_mode))
+            unit = build_schema_unit(p, mode=mode, sample_mode=sample_mode,
+                                     compact=compact)
+            # 空分片(0 记录: 如纯表头 CSV)不构成 IR 单元，不落盘
+            if unit.get("record_count", 0) == 0:
+                continue
+            append_unit(unit)
             written += 1
         if processed % 200 == 0:
             log.info("  阶段2 进度: 已处理 %d 文件, 累计写出 %d unit", processed, written)

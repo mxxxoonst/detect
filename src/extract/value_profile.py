@@ -26,6 +26,10 @@ from typing import Any, Dict, List, Optional
 # 每字段路径保留的样本上限 (优先覆盖不同 pattern 类别)
 SAMPLE_MAX = 5
 
+# 单个样本值最大字符数: 样本是「值形态证据」非全量载荷, 超长值 (嵌入 JSON/base64/
+# 长 free-text) 截断头部, 既控 IR 体积又收窄 PII 暴露面。email/phone/UUID/日期均 <64 不受影响。
+SAMPLE_VALUE_MAXLEN = 64
+
 
 # ──── 字符宏类: Unicode general category 首字母 → 宏桶 (互斥且穷尽) ────
 _CAT_MACRO = {
@@ -222,11 +226,22 @@ def _mask(value: Any) -> Any:
     )
 
 
+def _truncate(value: Any) -> Any:
+    """超长字符串样本截断头部 + `…` 标记; 非字符串原样返回。
+
+    样本只作值形态证据, 头部已足以表征 pattern; 截断同时控体积、收窄 PII 暴露面。
+    """
+    if isinstance(value, str) and len(value) > SAMPLE_VALUE_MAXLEN:
+        return value[:SAMPLE_VALUE_MAXLEN] + "…"
+    return value
+
+
 def _select_samples(raw_values: List[Any], profiles: List[Dict], mode: str) -> List[Any]:
     """按 pattern 去重挑样本: 每个不同 pattern 留首个代表, 最多 SAMPLE_MAX 个。
 
     优先覆盖不同 pattern 类别 (类别 > 5 时任取 5 种); null 不取样。
-    mode="raw" 落原值, "masked" 落脱敏值。
+    mode="raw" 落原值, "masked" 落脱敏值; 两者均经 _truncate 限长 (raw/masked 同样会
+    产生超长串——masked 的 `*` 串 1:1 保长亦需截断)。
     """
     picked: Dict[str, Any] = {}
     for v, p in zip(raw_values, profiles):
@@ -239,8 +254,8 @@ def _select_samples(raw_values: List[Any], profiles: List[Dict], mode: str) -> L
         if len(picked) >= SAMPLE_MAX:
             break
     if mode == "masked":
-        return [_mask(v) for v in picked.values()]
-    return list(picked.values())
+        return [_truncate(_mask(v)) for v in picked.values()]
+    return [_truncate(v) for v in picked.values()]
 
 
 def aggregate_profiles(

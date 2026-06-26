@@ -11,15 +11,22 @@ import argparse
 import json
 import logging
 import time
+import warnings
 from collections import Counter, defaultdict
 from pathlib import Path
+
+# openpyxl 对脏 xlsx（未知扩展 / 非法样式 specs / 无法解析的页眉页脚）会刷 UserWarning，
+# 真实语料里大量脏 xlsx 会把日志淹没。它们是无害的「已忽略并继续」，统一静音以保日志可读。
+warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
 
 from src.constants import LOW_CONF_THRESHOLD
 from src.sniff.profiler import profile_corpus
 from src.sniff.sniffer import sniff_file
 from src.parse.grade import grade_parse, grade_from_summary
-from src.extract.extractor import stream_schema_units, finalize_from_units
-from src.extract.schema_dedup import dedup_csv_schemas
+from src.extract.extractor import stream_schema_units, finalize_from_units, finalize_ir_from_units
+from src.extract.schema_dedup import (
+    dedup_csv_schemas, dedup_json_schemas, representative_sizes, rewrite_units_deduped,
+)
 from src.extract.schema_unit import set_unit_counter
 from src.utils.file_utils import walk_files, extension
 from src.utils.jsonl import append_jsonl, iter_jsonl, count_lines
@@ -232,7 +239,7 @@ def _sample_mode_from_args(args) -> str:
 
 
 def _run_extract_stream(grades_path: Path, output_dir: str, field_mode: str, restart: bool,
-                        sample_mode: str = "off"):
+                        sample_mode: str = "off", ir_only: bool = False):
     """阶段2 流式: 读 grades.jsonl(tier1) → 逐文件分片+构建 → 追加 schema_units.jsonl，
     再两遍流式聚合 global_view + vocab_table。内存恒定 O(单文件)，可断点续跑。
     """
@@ -259,23 +266,43 @@ def _run_extract_stream(grades_path: Path, output_dir: str, field_mode: str, res
     )
     processed, pc, written, skipped = stream_schema_units(
         grades_iter, field_mode, lambda u: append_jsonl(units_path, u), done_src,
-        sample_mode=sample_mode,
+        sample_mode=sample_mode, compact=ir_only,
     )
     log.info("  阶段2 Pass1 完成: 处理 %d 文件(跳过 %d), 新写出 %d unit", processed, skipped, written)
 
-    # Pass2: 两遍流式读 units → 聚合 + 词表
-    vocab_table, global_view = finalize_from_units(lambda: iter_jsonl(units_path))
-    global_view["partition_total"] = count_lines(units_path)
-
-    # Pass3 (Q2): CSV schema 级去重（语料级后处理，流式读 units → quote 感知指纹聚类）。
-    # dedup-with-multiplicity：每簇留代表 + cluster_size 频率权重，不改 schema_units.jsonl。
+    # Pass2 (Q2): schema 级去重 —— 报告 + 把 schema_units.jsonl 重写为「每簇留代表」。
+    # CSV/TSV 走 header/value 指纹(含无表头)，JSON/JSONL/其余走 skeleton 形状签名；
+    # 两者代表合并后单遍重写。dedup-with-multiplicity：代表打 cluster_size，重复单元不落盘。
+    # 在聚合之前做，使 global_view / vocab_table / top_skeletons 都基于去重后的 distinct schema。
     csv_dedup = dedup_csv_schemas(iter_jsonl(units_path))
+    json_dedup = dedup_json_schemas(iter_jsonl(units_path))
+    rep_size = representative_sizes(csv_dedup, json_dedup)
+    if rep_size:
+        rewrite_units_deduped(units_path, rep_size)
+
+    # Pass3: 聚合 global_view (+ 词表)，基于去重后的 units。--ir 建 IR 路径跳过全局
+    # vocab_table (§4.7)：schema_units.jsonl 本身即 IR 数据集 (紧凑 skeleton + 值样本)。
+    if ir_only:
+        global_view = finalize_ir_from_units(lambda: iter_jsonl(units_path))
+        vocab_table = {}
+        log.info("  --ir: 跳过全局 vocab_table 构建, schema_units.jsonl 即 IR 数据集")
+    else:
+        vocab_table, global_view = finalize_from_units(lambda: iter_jsonl(units_path))
+    global_view["partition_total"] = count_lines(units_path)
     global_view["csv_dedup"] = {
         "total_csv_units":  csv_dedup["total_csv_units"],
         "exact_buckets":    csv_dedup["exact_buckets"],
         "distinct_schemas": csv_dedup["distinct_schemas"],
     }
-    return vocab_table, global_view, units_path, csv_dedup
+    global_view["schema_dedup"] = {
+        "non_csv_units":    json_dedup["total_units"],
+        "distinct_schemas": json_dedup["distinct_schemas"],
+    }
+    dedup_report = {
+        "csv":     csv_dedup,           # CSV/TSV：header/value 指纹簇
+        "non_csv": json_dedup,          # JSON/JSONL/…：skeleton 形状签名簇
+    }
+    return vocab_table, global_view, units_path, dedup_report
 
 
 def cmd_extract(args):
@@ -294,20 +321,22 @@ def cmd_extract(args):
     _stream_grades(files, grades_path, args.restart)      # 阶段1：确保 grades.jsonl 就绪（可续跑）
 
     field_mode = getattr(args, "field_mode", "template")
-    vocab_table, global_view, units_path, csv_dedup = _run_extract_stream(
+    ir_only = getattr(args, "ir", False)
+    vocab_table, global_view, units_path, dedup_report = _run_extract_stream(
         grades_path, args.output_dir, field_mode, args.restart,
-        sample_mode=_sample_mode_from_args(args),
+        sample_mode=_sample_mode_from_args(args), ir_only=ir_only,
     )
     global_view["elapsed_s"] = round(time.time() - start, 1)
 
     _print_extract_report(global_view)
     _save_output(global_view, "extract_report.json", args.output_dir)
-    _save_output(
-        {"vocab_table": vocab_table, "uncertain": global_view.get("uncertain_vocab", [])},
-        "vocab_table.json",
-        args.output_dir,
-    )
-    _save_output(csv_dedup, "csv_dedup_report.json", args.output_dir)
+    if not ir_only:
+        _save_output(
+            {"vocab_table": vocab_table, "uncertain": global_view.get("uncertain_vocab", [])},
+            "vocab_table.json",
+            args.output_dir,
+        )
+    _save_output(dedup_report, "schema_dedup_report.json", args.output_dir)
     log.info("  schema_units 已流式写入: %s", units_path)
 
 
@@ -362,11 +391,12 @@ def cmd_pipeline(args):
     # 阶段2：流式提取
     log.info("── 阶段2: 五类信息提取（流式 schema_units.jsonl）──")
     field_mode = getattr(args, "field_mode", "template")
-    csv_dedup = None
+    ir_only = getattr(args, "ir", False)
+    dedup_report = None
     if c["tier1"]:
-        vocab_table, global_view, units_path, csv_dedup = _run_extract_stream(
+        vocab_table, global_view, units_path, dedup_report = _run_extract_stream(
             grades_path, args.output_dir, field_mode, args.restart,
-            sample_mode=_sample_mode_from_args(args),
+            sample_mode=_sample_mode_from_args(args), ir_only=ir_only,
         )
         _print_extract_report(global_view)
     else:
@@ -398,14 +428,15 @@ def cmd_pipeline(args):
         "total_elapsed_s": round(total_elapsed, 1),
     }
 
-    _save_output(
-        {"vocab_table": vocab_table, "uncertain": global_view.get("uncertain_vocab", [])},
-        "vocab_table.json",
-        args.output_dir,
-    )
+    if not ir_only:
+        _save_output(
+            {"vocab_table": vocab_table, "uncertain": global_view.get("uncertain_vocab", [])},
+            "vocab_table.json",
+            args.output_dir,
+        )
     _save_output(pipeline_result, "pipeline_report.json", args.output_dir)
-    if csv_dedup is not None:
-        _save_output(csv_dedup, "csv_dedup_report.json", args.output_dir)
+    if dedup_report is not None:
+        _save_output(dedup_report, "schema_dedup_report.json", args.output_dir)
     log.info("全流水线完成, 总耗时: %.1fs", total_elapsed)
     log.info("  schema_units 已流式写入: %s", units_path)
 
@@ -454,7 +485,9 @@ def _save_output(data, filename: str, output_dir: str):
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     path = out / filename
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    # errors="replace": 报表里若混入孤立代理项(broken \\uXXXX 样本)不致写盘崩溃
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2, default=str),
+                    encoding="utf-8", errors="replace")
     log.info("  输出: %s", path)
 
 
@@ -485,6 +518,8 @@ def _add_sample_args(p):
                    help="信息三保留样本值 (⚠ 落盘原值, 默认关闭以守 PII 红线); 每字段≤5个、按 pattern 去重")
     p.add_argument("--mask-samples", action="store_true",
                    help="配合 --keep-samples: 样本脱敏 (保留分隔符与长度, 内容字符打码), 不落原始字符")
+    p.add_argument("--ir", action="store_true",
+                   help="建 IR 数据集: schema_units.jsonl 即 IR (结构+拓扑+值样本+occurrence), 跳过全局 vocab_table")
 
 
 def main():

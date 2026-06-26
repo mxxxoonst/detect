@@ -14,8 +14,13 @@ log = get_logger(__name__)
 
 
 def append_jsonl(path: str | Path, obj: Any) -> None:
-    """追加一个对象为一行 JSON 并立即 flush（崩溃安全的最小单位）。"""
-    with open(path, "a", encoding="utf-8") as f:
+    """追加一个对象为一行 JSON 并立即 flush（崩溃安全的最小单位）。
+
+    ``errors="replace"``：样本值可能含**孤立代理项**（如 JSON 源里裸写 `\\ude08`，
+    json.loads 会产出一个无配对的 U+DE08，编码到 UTF-8 时 `surrogates not allowed`
+    报错）。用 replace 把它降级为 `?` 而非让整条流水线崩溃退出。
+    """
+    with open(path, "a", encoding="utf-8", errors="replace") as f:
         f.write(json.dumps(obj, ensure_ascii=False, default=str))
         f.write("\n")
         f.flush()
