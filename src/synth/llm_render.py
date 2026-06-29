@@ -325,30 +325,113 @@ def build_value_prompt(unit: Dict[str, Any], n_rows: int = 3,
     )
 
 
+def _loads_lenient(s: str) -> Any:
+    """``strict=False`` 容许字符串内裸控制符（TAB/换行/\\x01——来自源数据二进制/HTML/
+    自由文本列），否则 LLM 原样带出会被严格解析器拒为 'Invalid control character'。"""
+    return json.loads(s, strict=False)
+
+
+def _first_balanced_array(text: str) -> Optional[str]:
+    """引号/转义感知地截取**首个配平** ``[...]``，绕开夹带散文 / 重复'corrected'数组
+    （旧贪婪正则 `\\[.*\\]` 会吞到最后一个 `]`）。无闭合（截断）返回 None。"""
+    start = text.find("[")
+    if start < 0:
+        return None
+    depth = 0
+    in_str = esc = False
+    for i in range(start, len(text)):
+        c = text[i]
+        if in_str:
+            esc = (c == "\\") and not esc
+            if c == '"' and not esc:
+                in_str = False
+        elif c == '"':
+            in_str = True
+        elif c == "[":
+            depth += 1
+        elif c == "]":
+            depth -= 1
+            if depth == 0:
+                return text[start:i + 1]
+    return None
+
+
+def _scan_objects(text: str) -> List[str]:
+    """引号/转义感知地切出所有顶层配平 ``{...}`` 子串。整体解析失败时逐对象兜底：
+    截断只丢未闭合的尾对象、单对象括号/分隔符错位只丢该对象，其余行的值照收。"""
+    objs: List[str] = []
+    i, n = 0, len(text)
+    while i < n:
+        if text[i] != "{":
+            i += 1
+            continue
+        depth = 0
+        in_str = esc = False
+        j = i
+        while j < n:
+            c = text[j]
+            if in_str:
+                esc = (c == "\\") and not esc
+                if c == '"' and not esc:
+                    in_str = False
+            elif c == '"':
+                in_str = True
+            elif c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+                if depth == 0:
+                    objs.append(text[i:j + 1])
+                    i = j + 1
+                    break
+            j += 1
+        else:                       # 扫到结尾仍未闭合（截断的尾对象）→ 收工
+            break
+    return objs
+
+
 def _parse_value_matrix(raw: str, fields: List[str]) -> Tuple[Dict[str, list], int]:
-    """LLM 文本 → ({field: [值,...]}, 行数)。容错 JSON（剥围栏、截取首个 [...]）。"""
+    """LLM 文本 → ({field: [值,...]}, 行数)。容错三层 + 字段名 strip 匹配。
+
+    解析:① 整体容错解析(strict=False);② 失败→截首个配平数组;③ 仍失败→逐对象兜底
+    (截断/单对象坏只丢该行)。匹配:精确键优先,回退 ``strip()`` 容忍定宽 padding 字段名
+    (源 CSV 表头如 ``'ACC_AUTH        '``，LLM 回显时会 trim)。
+    """
     text = strip_fences(raw)
     data: Any = None
     try:
-        data = json.loads(text)
+        data = _loads_lenient(text)
     except Exception:
-        m = re.search(r"\[.*\]", text, re.DOTALL)
-        if m:
+        arr = _first_balanced_array(text)
+        if arr:
             try:
-                data = json.loads(m.group(0))
+                data = _loads_lenient(arr)
             except Exception:
                 data = None
     if isinstance(data, dict):
         data = [data]
-    if not isinstance(data, list):
-        return {}, 0
-    rows = [r for r in data if isinstance(r, dict)]
-    table: Dict[str, list] = {}
-    for f in fields:
-        vals = [r[f] for r in rows if f in r and r[f] is not None]
-        if vals:
-            table[f] = vals
-    return table, len(rows)
+    rows = [r for r in data if isinstance(r, dict)] if isinstance(data, list) else []
+    if not rows:                                    # 逐对象兜底
+        for chunk in _scan_objects(text):
+            try:
+                o = _loads_lenient(chunk)
+            except Exception:
+                continue
+            if isinstance(o, dict):
+                rows.append(o)
+
+    # 字段名归一化：精确优先，strip 后回退（容忍源表头 padding 与 LLM trim 的差异）
+    fset = set(fields)
+    canon = {f.strip(): f for f in fields}          # 'ACC_AUTH   '→ stripped 键映回规范名
+    table: Dict[str, list] = defaultdict(list)
+    for r in rows:
+        for k, v in r.items():
+            if v is None:
+                continue
+            cf = k if k in fset else (canon.get(k.strip()) if isinstance(k, str) else None)
+            if cf is not None:
+                table[cf].append(v)
+    return dict(table), len(rows)
 
 
 def make_fill_value_fn(table: Dict[str, list]) -> Callable:

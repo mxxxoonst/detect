@@ -70,6 +70,7 @@ def render_unit(
 
     seed = seed if seed is not None else _seed_of(unit.get("id", ""))
     n = n_records if n_records is not None else _DEFAULT_N
+    #value 生成回调函数
     vfn = value_fn or _default_value
 
     if fmt in ("csv", "tsv"):

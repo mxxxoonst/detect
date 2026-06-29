@@ -76,6 +76,38 @@ def test_parse_value_matrix_basic_and_tolerant():
     assert t3 == {} and n3 == 0
 
 
+def test_parse_value_matrix_padded_field_names():
+    """源表头定宽 padding（'a   '），LLM 回显 trim 成 'a' → strip 匹配仍归位。"""
+    fields = ["a   ", "   b"]                       # 带 padding 的真实字段名
+    t, n = _parse_value_matrix('[{"a":1,"b":2},{"a":3,"b":4}]', fields)
+    assert n == 2
+    assert t["a   "] == [1, 3] and t["   b"] == [2, 4]
+
+
+def test_parse_value_matrix_unescaped_control_char():
+    """值含裸 TAB/控制符（来自二进制/HTML 列）→ strict=False 仍解析。"""
+    fields = ["x", "y"]
+    t, n = _parse_value_matrix('[{"x":",\t1","y":"_binary \'\x01\'"}]', fields)
+    assert n == 1 and t["x"] == [",\t1"]
+
+
+def test_parse_value_matrix_ignores_trailing_prose_and_dup_array():
+    """LLM 在正确数组后加散文+'corrected'重复数组 → 只取首个配平数组（不被贪婪吞并）。"""
+    fields = ["a"]
+    raw = ('[{"a":1}]\n\nNote: there was a mix-up, corrected version:\n'
+           '[{"a":999}]')
+    t, n = _parse_value_matrix(raw, fields)
+    assert n == 1 and t["a"] == [1]                 # 取首个，非 999
+
+
+def test_parse_value_matrix_truncated_recovers_complete_rows():
+    """输出被 max_tokens 截断（尾对象未闭合）→ 逐对象兜底救回完整行。"""
+    fields = ["a", "b"]
+    raw = '[{"a":1,"b":2},{"a":3,"b":4},{"a":5,"b":'    # 第三行截断
+    t, n = _parse_value_matrix(raw, fields)
+    assert t["a"] == [1, 3] and t["b"] == [2, 4]     # 前两行无损，尾行丢弃
+
+
 def test_make_fill_value_fn_cursor_and_fallback():
     import random
     fn = make_fill_value_fn({"a": ["x", "y"]})
