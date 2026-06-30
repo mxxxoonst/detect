@@ -87,23 +87,20 @@ detect/
 │   │   ├── sql_parser.py         # SQL 文本: regex 抽 CREATE/INSERT 头部 + 方言标注
 │   │   └── xlsx_parser.py        # xlsx: openpyxl read_only 读 sheet 表头 (二进制只读)
 │   ├── extract/                  # [阶段2] Schema 单元化提取 (仅 tier1)
-│   │   ├── extractor.py          # extract_all()(内存) + stream_schema_units()/finalize_from_units()(流式) + extract_five_infos() 薄包装
+│   │   ├── extractor.py          # stream_schema_units()(流式构建) + finalize_ir_from_units()(IR聚合) / finalize_from_units()(非IR+vocab) + _aggregate_global_view()
 │   │   ├── schema_types.py       # 共享 TypedDict: SchemaPartition/SchemaUnit/FieldInfo/VocabTable
 │   │   ├── schema_partition.py   # partition_file() — 文件内 Schema 分片
 │   │   ├── schema_unit.py        # build_schema_unit() — 单遍折叠遍历组装五类信息
 │   │   ├── vocab_table.py        # build_vocab_table() — 跨表同义倒排
-│   │   ├── skeleton.py           # 信息一: 结构骨架
-│   │   ├── vocabulary.py         # 信息二: 字段名词表 (仅旧 extract_five_infos 用)
+│   │   ├── skeleton.py           # 信息一: 结构骨架 + union-schema 归一聚类
 │   │   ├── value_profile.py      # 信息三: value 画像 (统计摘要，不存原值)
-│   │   ├── topology.py           # 信息四: 拓扑 (仅旧 extract_five_infos 用)
-│   │   └── pii_seed.py           # 信息五: PII 种子
+│   │   └── pii_seed.py           # 信息五: PII 种子 (key 名推断 + free_text 标记)
 │   └── utils/
 │       ├── logger.py             # setup_logger()/get_logger()，pii_detect 根命名空间
 │       ├── jsonl.py              # append_jsonl/iter_jsonl — 阶段间落盘+断点续跑(容忍截断尾行)
 │       ├── encoding.py           # chardet 探编码 + safe_decode
 │       ├── file_utils.py         # is_binary(), 读头, walk_files
 │       └── text_utils.py         # 括号平衡, 列稳定性, 非空行, JSON 试探
-├── parsers/                      # [独立参考] LLM 驱动解析器系统 (Gateway 模式，依赖外部框架，与 src/ 无调用关系)
 ├── tests/                        # pytest (test_sniff / test_parse / test_extract)
 ├── test_data/
 │   ├── generate.py               # 测试数据生成器
@@ -130,5 +127,4 @@ detect/
 ## 禁止事项
 
 - ❌ **对结构化扩展名再做内容投票**——`.txt`/`.log`/无扩展名才投票；json/csv/sql/xlsx 等后缀直接信任，格式错配交由阶段1 容错解析暴露为 tier2/3。
-- ❌ **直接 import `parsers/`**——它依赖不在本仓库的外部框架（`core.base` 等），import 会失败；该目录为参考实现。
-- ❌ **混用 `extract_all()` 与 `extract_five_infos()` 的输出**——前者 Schema 单元化带溯源，后者是拍平的全局扁平 dict，格式不同。
+- ❌ **依赖已删除的旧入口/模块**——`extract_all()` / `extract_five_infos()`（内存版主入口 + 扁平包装）及 `vocabulary.py` / `topology.py` 已删；阶段2 一律走流式 `stream_schema_units` + `finalize_ir_from_units`(IR) / `finalize_from_units`(非 IR)。`parsers/` 目录也已不存在。

@@ -1,7 +1,7 @@
 """SQL 文本解析器: 严格内核 (scan_sql 状态机) + 容错抽取 (regex 降级)。
 
 角色解耦 (见 docs/parser_strict_tolerant_design.md §2.4):
-- **严格内核** = `sql_strict.scan_sql_file`: 引号/注释/括号/`$$`/`--` 感知的超集分句器,
+- **严格内核** = `sql_strict.iter_sql_file_statements`: 引号/注释/括号/`$$`/`--` 感知的超集分句器,
   全语句平衡、扫到 EOF 无截断、每条可归类 ⟹ strict_ok (I_strict==1 ⟺ tier1)。
 - **容错叠加** = 现有 regex (`CREATE_INSERT_RE`) **降级**为抽取器, 跑在 scan_sql 切出的语句
   边界上: 损坏语句里仍能抽出 表名+列清单 → schema 进通道一 (P); 连头都抽不出 → L。

@@ -180,11 +180,6 @@ def _str_profile(s: str) -> Dict:
     return result
 
 
-def _make_pattern(s: str) -> str:
-    """单字符串 → 字符类模式模板 (薄包装, 复用 _str_profile 的同源 pattern)。"""
-    return _str_profile(s)["pattern"]
-
-
 def _numeric_hint(value: int | float | bool) -> str:
     if isinstance(value, bool):
         return "bool"

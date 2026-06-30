@@ -207,35 +207,31 @@ tier1 ⟺ I_strict == 1  ⟺ deviations == 0  ⟺ 严格内核全程零偏离消
 - `_cpl_from_grade()` 从 `n_detail.{c_count,p_count,l_count,n_total}` 还原 $C/P/L$；干净 tier1 无明细时 $C=N$。
 - **类型用 TypedDict**（`StrictVerdict`/`RecoveryReport`/`ParseResult`），仅 `Grade` 沿用 dataclass。
 - **SQL GB 流式**：`sql_strict.iter_sql_file_statements()` 惰性逐条 yield 语句，`parse_sql_text` 单遍累加
-  $C/P/L$ + `has_create/insert` + scan 计数，**不 `list()` 物化全部语句**（GB SQL dump 内存恒定）。
-  `scan_sql_file()`（物化版）仅留给小文件/测试。
+  $C/P/L$ + `has_create/insert` + scan 计数，**不 `list()` 物化全部语句**（GB SQL dump 内存恒定）；
+  逐文件汇总由 `summarize()` 产出 `ScanResult`。
 
 ---
 
 ## 4. 阶段2 — Schema 单元化提取（`src/extract/`）
 
-执行三段：**`partition_file` → `build_schema_unit` → `build_vocab_table`**，由 `extract_all()` 编排。
+执行三段：**`partition_file` → `build_schema_unit` →（非 IR）`build_vocab_table`**，CLI 经流式入口
+`stream_schema_units` + `finalize_*` 编排（IR 路径跳过 `build_vocab_table`）。
 
-### 4.1 两个阶段2 入口：内存版 vs 流式版
+### 4.1 阶段2 入口：流式 + 断点续跑（IR vs 非 IR 两条 finalize）
 
-**内存版 `extract_all(tier1_grades, mode)`**（旧主入口，`extract_five_infos` 与测试仍用）：
-
-```
-tier1 grades ──► partition_file()  逐文件分片 → list[SchemaPartition]
-             ──► build_schema_unit() 逐分片组装 → list[SchemaUnit]（含五类信息，全量驻留内存）
-             ──► build_vocab_table() 跨单元同义聚类 → (VocabTable, uncertain)
-             ──► _aggregate_global_view() → global_view
-返回 (schema_units, vocab_table, global_view)
-```
-
-**流式版（CLI `extract`/`pipeline` 实际走这条，内存恒定 + 断点续跑）**：
+阶段2 只保留流式入口（CLI `extract`/`pipeline` 实际走这条，内存恒定 + 断点续跑）：
 
 ```
-grades.jsonl(tier1) ──► stream_schema_units()  逐文件 partition→build_unit→即时 append schema_units.jsonl
-                    ──► finalize_from_units()   两遍流式读 schema_units.jsonl:
-                            ① _aggregate_global_view(惰性迭代) → global_view（增量计数，内存恒定）
-                            ② build_vocab_table(惰性迭代)     → (VocabTable, uncertain)（KeyEntry 入内存）
+grades.jsonl(tier1) ──► stream_schema_units(compact)  逐文件 partition→build_unit→即时 append schema_units.jsonl
+                    ──► finalize：
+                          • IR 路径（--ir，compact=True）：finalize_ir_from_units
+                              └ _aggregate_global_view(惰性迭代) → global_view（**跳过** vocab_table）
+                          • 非 IR 路径：finalize_from_units  两遍流式读 schema_units.jsonl:
+                              ① _aggregate_global_view(惰性迭代) → global_view（增量计数，内存恒定）
+                              ② build_vocab_table(惰性迭代)     → (VocabTable, uncertain)（KeyEntry 入内存）
 ```
+
+> 旧的内存版主入口 `extract_all()` 与兼容扁平包装 `extract_five_infos()` 已删除（无生产调用者）。
 
 - 流式版只把"单文件的分片/unit"留在内存，写完即弃；`schema_units.jsonl` 每行一个 SchemaUnit。
 - `finalize` 两遍读盘各自独立（`units_iter_factory()` 每次返回新迭代器）；全局聚合内存恒定，
@@ -273,7 +269,8 @@ grades.jsonl(tier1) ──► stream_schema_units()  逐文件 partition→build
 - **路径折叠**：list 下标统一折叠成 `[]`（模板路径），五类信息共用同一套路径。`orders[0].amt`/`orders[1].amt` → `orders[].amt`。
 - 单遍同时产出：`sig_counter`（逐记录签名 → B/AB_ratio）、`template_values`（元素级值聚合 → value 画像）、`dtype_seen`（每路径类型计数，null 不计入）。
 - **ID 分配**：`unit_id = "sch_{N:05d}"`、`field_id = "f_{su_seq:05d}_{seq:02d}"`，单 run 内自增。
-- **occurrence** 当前为占位符 `1.0`（`required` 恒 True），真值待 `optional_field_grouping`（见 todo）。
+- **occurrence**：由 `partition["occurrence"]`（schema_partition 的 union-schema 聚类，每字段 presence-rate）回填——
+  JSON/JSONL 为真值，CSV/SQL 等无聚类格式兜底 `1.0`；`required = occ ≥ 0.9`。
 - **`sample_mode`**（`"off"`/`"raw"`/`"masked"`，CLI `--keep-samples`/`--mask-samples`）透传给字段
   画像聚合：`aggregate_profiles([profile_value(v) for v in values], values, sample_mode)`，详见 §4.6。
 
@@ -366,9 +363,10 @@ SchemaUnit 的投影**，逐文件流式产出（`stream_schema_units` → `sche
 | 槽位 | 来源 | 取舍 |
 |------|------|------|
 | 身份/溯源 `id`/`source_file`/`partition_id`/`format`/`record_count` | SchemaUnit 自带 | 保留：廉价且必需（per-unit 去重 / 加权 / 溯源） |
-| **结构** `skeleton` + `skeleton_counts` | 信息一 | 核心 x。**嵌套已编码在折叠路径里**（`orders[].amt`），拓扑是它的派生视图 |
-| **拓扑** `topology` | 信息四 | 与骨架冗余：编码器若直接吃路径串可省；需显式喂树结构再留 |
-| **值证据** `fields[path].samples` | 信息三的**样本通道** | **直接用值样本**（见下），不用统计画像作输入 |
+| **结构** `skeleton` | 信息一 | 核心 x。compact IR 下 `skeleton` 收敛为 `{path: {depth, type, occurrence, samples}}` 字典；只带 `skeleton_count_B`，**不落** `skeleton_counts` 冗余块 |
+| **拓扑** depth | 信息四 | compact IR 不产独立 `topology`：层级隐含在折叠路径键里，`depth = path.count(".")+1`（CSV/TSV 平表恒 1） |
+| **出现率** `skeleton[path].occurrence` | union-schema 聚类 | 每字段 presence-rate 真值（JSON/JSONL；无聚类兜底 1.0），兑现"IR 带 occurrence 真值" |
+| **值证据** `skeleton[path].samples` | 信息三的**样本通道** | **直接用值样本**（见下）；compact 直接走 `_select_samples`（按 pattern 去重），跳过 `aggregate_profiles` 全量统计 |
 | ~~字段名词表 vocab_table~~ | 信息二 | **删**：全局跨表 join，非单元 IR；也是 Pass2 历史卡死那步（§4.5） |
 | PII 种子 `pii_seed` | 信息五 | 可选**弱标签通道**（是 y 不是 x），由 key 名+样本派生、可后算；建 IR 时可不带 |
 
@@ -404,15 +402,20 @@ SchemaUnit 的投影**，逐文件流式产出（`stream_schema_units` → `sche
 | `VocabTable` | `build_vocab_table` 产出 | `VocabTable[semantic_class][key_variant] = [schema_unit_id, …]`（任意键倒排，类型别名） |
 | `KeyEntry` | `build_vocab_table` 内部 | 字段判别线索：key_name/path/schema_unit_id/field_id/value_profile/pii_seed |
 
+> ⚠ 上表 `SchemaUnit` 是**冗长（非 IR）形态**。compact IR（`--ir`）单元只含
+> `id`/`source_file`/`format`/`partition_id`/`skeleton`(dict `{path:{depth,type,occurrence,samples}}`)/
+> `skeleton_count_B`/`record_count`——**不落** `skeleton_counts`/`topology`/`fields`（§4.7）。
+
 ---
 
-## 6. 两个提取入口的区别（勿混用）
+## 6. 阶段2 finalize 的两条路径（IR vs 非 IR）
 
-- `extract_all()`：**新主入口**，Schema 单元化、带溯源（每字段可追到来源文件/表）。
-- `extract_five_infos()`：**兼容薄包装**，跑 `extract_all` 后把每个 SchemaUnit 拍平成旧的全局扁平五类信息 dict
-  （路径用折叠模板路径；value_profiles/topology 跨分片合并，**同名路径后者覆盖**；**无溯源**）。新代码勿用。
+- `finalize_ir_from_units()`（`--ir`，`compact=True`）：只 `_aggregate_global_view` 聚合 `global_view`，
+  **跳过 `vocab_table`**；产出的 `schema_units.jsonl`（compact skeleton）即 IR 数据集（§4.7）。
+- `finalize_from_units()`（非 IR）：在全局聚合之外额外两遍流式 `build_vocab_table`，产出跨表同义倒排
+  （语料分析产物，非编码器输入）。
 
-两者输出格式不同，禁止混用。
+旧的 `extract_all()` / `extract_five_infos()`（内存版主入口 + 扁平包装）已删除，无生产调用者。
 
 ---
 

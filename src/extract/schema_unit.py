@@ -11,7 +11,8 @@
   - "fold"（A）：字段主干 = 全部折叠 leaf 路径并集（含数组元素级异构、少数派可选字段）。
 
 两套共用同一遍遍历，仅在"主干路径集"的选取上分叉（B 的路径集 ⊆ A 的路径集）。
-occurrence 暂为占位符 1.0（真值随 optional_field_grouping 一并落地，见 todo_list.md）。
+occurrence 由 schema_partition 的 union-schema 聚类给出每字段 presence-rate 真值
+（JSON/JSONL）；compact IR 与冗长 fields 均消费该真值，无聚类的格式（CSV/SQL）兜底 1.0。
 """
 
 import itertools
@@ -24,7 +25,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from src.constants import SAMPLE_PER_FILE
 from src.extract.schema_types import SchemaPartition, SchemaUnit,FieldInfo
 from src.extract.skeleton import structure_signature
-from src.extract.value_profile import profile_value, aggregate_profiles
+from src.extract.value_profile import profile_value, aggregate_profiles, _select_samples
 from src.extract.pii_seed import key_name_implies_pii, infer_pii_type, is_free_text_field
 from src.utils.logger import get_logger
 
@@ -92,28 +93,35 @@ def build_schema_unit(
     #    sig_counter     : 逐记录签名计数 → 保 B / skeleton_counts / AB_ratio（不依赖折叠）
     #    template_values : 折叠路径 → 该路径所有叶子值（元素级聚合，供 value 画像）
     #    dtype_seen      : 折叠路径 → 类型计数（null 不计入，供 skeleton dtype 多型判定）
+    # compact 省算（仅 --ir）：template 模式不数类型、sample off 不收值；默认 --ir(template
+    # + off) 时 _walk_fold 整体跳过、只数签名。非 compact 恒填两者，行为与原先一致。
+    need_values = (not compact) or (mode == "fold") or (sample_mode != "off")
+    need_dtypes = (not compact) or (mode == "fold")
     sig_counter: Counter = Counter()
     template_values: Dict[str, list] = defaultdict(list)
     dtype_seen: Dict[str, Counter] = defaultdict(Counter)
     for rec in records:
         sig_counter[structure_signature(rec)] += 1
-        _walk_fold(rec, "", template_values, dtype_seen)
+        if need_values or need_dtypes:
+            _walk_fold(rec, "",
+                       template_values if need_values else None,
+                       dtype_seen if need_dtypes else None)
 
     # 4. 信息一：骨架 B 计数（始终来自逐记录签名，与字段主干方案无关）
     skeleton_count_B = len(sig_counter)
-    skeleton_counts = dict(sig_counter.most_common(50))
 
     # 5. 字段主干路径集 + skeleton 路径列表（随 mode 分叉）
     backbone, skeleton = _backbone_and_skeleton(
         mode, template_values, dtype_seen, sig_counter
     )
 
-    # 5b. 紧凑 IR（--ir）：单一 skeleton 字典 {path: {depth, type, samples}}，
-    #     拓扑(depth 由点路径深度给出，层级隐含在 path 键里)/类型/样本三合一，
+    # 5b. 紧凑 IR（--ir）：单一 skeleton 字典 {path: {depth, type, occurrence, samples}}，
+    #     拓扑(depth 由点路径深度给出，层级隐含在 path 键里)/类型/出现率/样本四合一，
     #     不建 value_profile / 独立 topology / fields / skeleton_counts。
     if compact:
+        occ_map = partition.get("occurrence") or {}
         skel = _compact_skeleton(backbone, skeleton, template_values, sample_mode,
-                                 partition["format"])
+                                 partition["format"], occ_map)
         partition["field_paths"] = set(skel.keys())
         log.debug("build_schema_unit %s [%s] compact: 采样 %d 条, 字段 %d 个",
                   unit_id, partition["partition_id"], len(records), len(skel))
@@ -126,6 +134,9 @@ def build_schema_unit(
             "skeleton_count_B": skeleton_count_B,
             "record_count":     len(records),
         }
+
+    # skeleton_counts 仅冗长形态消费（compact IR 已在上方返回，不物化此冗余块）
+    skeleton_counts = dict(sig_counter.most_common(50))
 
     # 6. 信息四：拓扑（裁剪到主干；noisy 标记时跳过）
     noisy = partition.get("noisy", False)
@@ -199,15 +210,20 @@ def _compact_skeleton(
     template_values: Dict[str, list],
     sample_mode: str,
     fmt: str,
+    occ_map: Dict[str, float],
 ) -> Dict[str, Dict]:
-    """组装紧凑骨架 ``{path: {depth, type, samples}}``。
+    """组装紧凑骨架 ``{path: {depth, type, occurrence, samples}}``。
 
     - depth：JSON/JSONL 取折叠点路径深度（``path.count(".")+1``，层级隐含在 path 键里，
       如 ``meta.geo.lat`` / ``orders[].amt``）；CSV/TSV 是平表，字段恒为 depth 1
       （列名若含 ``.`` 不应被误判成嵌套）。
     - type：该路径的主类型（多型取 skeleton 的 dominant dtype）。
+    - occurrence：union-schema 聚类的每字段 presence-rate（JSON/JSONL 真值；CSV/SQL 等
+      无聚类 → 兜底 1.0），兑现 guides §4.7「IR 带 occurrence 真值」。
     - samples：按 pattern 去重的样本值（≤SAMPLE_MAX），受 sample_mode 闸门约束
-      （"off" 不留原值，守 PII 红线）。
+      （"off" 不留原值，守 PII 红线）。**省算**：直接走 ``_select_samples``（只依赖
+      profile_value 的 ``pattern`` 作去重键），跳过 ``aggregate_profiles`` 的
+      len_dist/char_dist/scripts/avg_* 全量统计——这些聚合产物 compact 一律不落。
     """
     tabular = fmt in ("csv", "tsv")
     type_of = {entry[0]: entry[1] for entry in skeleton}
@@ -216,14 +232,14 @@ def _compact_skeleton(
         values = template_values.get(path, [])
         samples: list = []
         if sample_mode != "off" and values:
-            vp = aggregate_profiles(
-                [profile_value(v) for v in values], values, sample_mode
+            samples = _select_samples(
+                values, [profile_value(v) for v in values], sample_mode
             )
-            samples = vp.get("samples", [])
         skel[path] = {
-            "depth":   1 if tabular else path.count(".") + 1,
-            "type":    type_of.get(path, "null"),
-            "samples": samples,
+            "depth":      1 if tabular else path.count(".") + 1,
+            "type":       type_of.get(path, "null"),
+            "occurrence": occ_map.get(path, 1.0),
+            "samples":    samples,
         }
     return skel
 
@@ -244,7 +260,8 @@ def _type_tag(value: Any) -> str:
 
 
 def _walk_fold(
-    node: Any, prefix: str, values: Dict[str, list], dtypes: Dict[str, Counter]
+    node: Any, prefix: str,
+    values: Optional[Dict[str, list]], dtypes: Optional[Dict[str, Counter]],
 ) -> None:
     """折叠遍历：list 下标折叠成 []，仅叶子（标量/标量列表元素）落值与类型。
 
@@ -252,6 +269,8 @@ def _walk_fold(
     - list → 路径加 [] 标记，对【每个】元素递归（保留异构元素字段）
     - 标量 → 在 prefix 处落值；非 null 时记类型计数
     容器节点（dict/list 本身）不作为字段，只有叶子进入 values/dtypes。
+    ``values`` / ``dtypes`` 传 None 时跳过对应收集（compact 省算：见 build_schema_unit
+    的 need_values/need_dtypes 闸门），互不影响。
     """
     if isinstance(node, dict):
         for k, v in node.items():
@@ -263,13 +282,15 @@ def _walk_fold(
             if isinstance(item, (dict, list)):
                 _walk_fold(item, list_path, values, dtypes)
             else:                                    # list-of-scalar → e.g. tags[]
-                values[list_path].append(item)
-                if item is not None:
+                if values is not None:
+                    values[list_path].append(item)
+                if dtypes is not None and item is not None:
                     dtypes[list_path][_type_tag(item)] += 1
     else:                                            # 标量叶子
         if prefix:
-            values[prefix].append(node)
-            if node is not None:
+            if values is not None:
+                values[prefix].append(node)
+            if dtypes is not None and node is not None:
                 dtypes[prefix][_type_tag(node)] += 1
 
 

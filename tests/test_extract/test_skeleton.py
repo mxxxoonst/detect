@@ -1,6 +1,6 @@
 """测试 skeleton: 结构骨架."""
 
-from src.extract.skeleton import structure_signature, collect_skeletons
+from src.extract.skeleton import structure_signature
 
 
 def test_signature_flat_dict():
@@ -22,15 +22,3 @@ def test_signature_null():
     rec = {"value": None}
     sig = structure_signature(rec)
     assert "<null>" in sig
-
-
-def test_collect_skeletons_counts():
-    records = [
-        {"a": 1, "b": "x"},
-        {"a": 2, "b": "y"},
-        {"a": 3, "b": "z", "c": True},
-    ]
-    counter = collect_skeletons(records)
-    # 前两条骨架相同, 第三条多一个字段 c
-    assert len(counter) == 2
-    assert list(counter.values())[0] == 2

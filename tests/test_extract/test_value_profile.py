@@ -99,10 +99,3 @@ def test_aggregate_masked_samples_no_raw_chars():
     # 分隔符保留、内容打码: 不含任何原始字母/数字
     assert masked == "****@*******.***"
     assert "user" not in masked and "example" not in masked
-
-
-def test_make_pattern():
-    from src.extract.value_profile import _make_pattern
-    assert _make_pattern("13812345678") == "D{11}"
-    assert _make_pattern("abc123") == "L{3}D{3}"
-    assert _make_pattern("张三") == "C{2}"

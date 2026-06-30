@@ -221,28 +221,3 @@ def _profile_bucket_key(vp: Dict) -> Optional[tuple]:
     if mean and mean > 0:
         return (t, round(math.log(mean + 1.0, _LEN_BAND_BASE)))
     return (t, "nolen")
-
-
-def profile_similarity(p1: Dict, p2: Dict) -> float:
-    """value 画像相似度占位实现。
-
-    当前逻辑：
-      - type 不同 → 0.0
-      - type 相同且有 len_dist → 0.5 + 0.5 × min/max 均值比
-      - type 相同无 len_dist   → 0.8
-    后续随 profile_value 完善时替换为真实度量。
-    """
-    t1 = p1.get("type", "")
-    t2 = p2.get("type", "")
-    if not t1 or not t2 or t1 != t2:
-        return 0.0
-
-    ld1 = p1.get("len_dist", {})
-    ld2 = p2.get("len_dist", {})
-    if ld1 and ld2:
-        m1 = ld1.get("mean", 0)
-        m2 = ld2.get("mean", 0)
-        if m1 > 0 and m2 > 0:
-            return 0.5 + 0.5 * min(m1, m2) / max(m1, m2)
-
-    return 0.8  # 类型相同但无长度信息，保守认为相似

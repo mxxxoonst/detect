@@ -53,7 +53,7 @@ class SqlStatement(NamedTuple):
 
 
 class ScanResult(NamedTuple):
-    """`scan_sql_file` 的逐文件汇总 (不含任何 SQL 原文)。
+    """`summarize` 的逐文件汇总 (不含任何 SQL 原文; 由 iter_sql_file_statements 流式累计)。
 
     C/P/L:    语句级计数。严格内核里 C = 平衡且可归类的语句; P = 容错抽取救回的语句;
               L = 截断/不可归类语句。本模块只产 scan 层事实 (n_total/n_balanced/n_truncated);
@@ -313,18 +313,6 @@ def iter_sql_file_statements(path: str, encoding: str) -> Iterator[SqlStatement]
     **绝不 `list()` 物化全部语句** (否则数百万语句的文本会撑爆内存)。
     """
     yield from scan_sql_statements(_file_chunks(path, encoding))
-
-
-def scan_sql_file(path: str, encoding: str) -> tuple[list[SqlStatement], ScanResult]:
-    """流式扫一个 SQL 文件, 返回 (语句列表, 汇总)。
-
-    ⚠ 物化全部语句到 list, **仅供小文件/测试** (GB 文件请用 `iter_sql_file_statements`
-    惰性消费, 见 parse_sql_text)。
-
-    严格判定: strict_ok ⟺ 至少 1 条语句 ∧ 零截断 ∧ 所有语句平衡且正常收尾。
-    """
-    statements = list(iter_sql_file_statements(path, encoding))
-    return statements, summarize(statements)
 
 
 def summarize(statements: list[SqlStatement]) -> ScanResult:

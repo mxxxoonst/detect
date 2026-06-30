@@ -4,7 +4,6 @@ from src.extract.schema_types import SchemaUnit
 from src.extract.vocab_table import (
     build_vocab_table,
     _string_similarity,
-    profile_similarity,
 )
 
 
@@ -292,33 +291,3 @@ class TestStringSimHelper:
 
     def test_empty_string_returns_zero(self):
         assert _string_similarity("", "name") == 0.0
-
-
-class TestProfileSimHelper:
-    def test_same_type_no_len_dist(self):
-        # 同类型但无长度信息 → 0.8（保守相似）
-        assert profile_similarity({"type": "str"}, {"type": "str"}) == 0.8
-
-    def test_different_types_zero(self):
-        assert profile_similarity({"type": "str"}, {"type": "int"}) == 0.0
-
-    def test_missing_type_zero(self):
-        assert profile_similarity({}, {"type": "str"}) == 0.0
-
-    def test_same_type_with_similar_len(self):
-        p1 = {"type": "str", "len_dist": {"mean": 10}}
-        p2 = {"type": "str", "len_dist": {"mean": 8}}
-        sim = profile_similarity(p1, p2)
-        expected = 0.5 + 0.5 * (8 / 10)
-        assert abs(sim - expected) < 1e-9
-
-    def test_same_type_identical_len(self):
-        p = {"type": "str", "len_dist": {"mean": 11}}
-        assert profile_similarity(p, dict(p)) == 1.0
-
-    def test_threshold_for_clustering(self):
-        # mean=10 vs mean=4 → sim = 0.5+0.5*(4/10) = 0.7 (刚好达到阈值)
-        p1 = {"type": "str", "len_dist": {"mean": 10}}
-        p2 = {"type": "str", "len_dist": {"mean": 4}}
-        sim = profile_similarity(p1, p2)
-        assert abs(sim - 0.7) < 1e-9

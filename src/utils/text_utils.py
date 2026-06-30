@@ -3,7 +3,6 @@
 import json
 import re
 from collections import Counter
-from statistics import stdev
 from typing import List, Dict
 
 
@@ -32,13 +31,6 @@ def balanced_brackets(text: str) -> bool:
     return len(stack) == 0
 
 
-def avg_line_len(lines: List[str]) -> float:
-    """平均行长."""
-    if not lines:
-        return 0.0
-    return sum(len(line) for line in lines) / len(lines)
-
-
 def has_sentence_punctuation(lines: List[str]) -> bool:
     """检测是否含自然语言标点 (句号、逗号、问号等)."""
     punct = re.compile(r"[。，？！、；：,.!?;:]")
@@ -51,20 +43,11 @@ def no_strong_structure_signal(scores: Dict[str, float]) -> bool:
     return all(v < 0.5 for v in scores.values())
 
 
-def column_stability(lines: List[str], sep: str) -> tuple:
-    """返回 (第一行列数, 列数标准差, 列数列表)."""
-    col_counts = [line.count(sep) + 1 for line in lines]
-    if not col_counts:
-        return 0, 0.0, []
-    sd = stdev(col_counts) if len(col_counts) > 1 else 0.0
-    return col_counts[0], sd, col_counts
-
-
 def column_profile(lines: List[str], sep: str) -> tuple:
     """返回 (众数列数, 命中众数的行占比, 行数)。
 
-    相比 column_stability 用"首行列数 + 标准差", 这里用"众数列数 + 命中比例",
-    对少数因 value 内嵌分隔符而漂移的行更鲁棒 (无表头 CSV 也适用)。
+    用"众数列数 + 命中比例"(而非首行列数 + 标准差), 对少数因 value 内嵌分隔符
+    而漂移的行更鲁棒 (无表头 CSV 也适用)。
     """
     col_counts = [line.count(sep) + 1 for line in lines]
     if not col_counts:
@@ -88,10 +71,3 @@ def try_json_loads(line: str):
         return json.loads(line)
     except (json.JSONDecodeError, ValueError):
         return None
-
-
-# ──── 阶段1/2 用 ────
-
-def regex_search(pattern: str, text: str, flags: int = 0) -> bool:
-    """返回 pattern 是否在 text 中匹配."""
-    return bool(re.search(pattern, text, flags))

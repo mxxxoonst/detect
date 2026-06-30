@@ -72,15 +72,6 @@ def _signature(value: Any) -> str:
     return f"<{type(value).__name__}>"
 
 
-def collect_skeletons(records: List[Dict]) -> Counter:
-    """收集一批 records 的骨架签名计数。"""
-    counter: Counter = Counter()
-    for rec in records:
-        sig = structure_signature(rec)
-        counter[sig] += 1
-    return counter
-
-
 # ── union-schema 归一化（兼容性合并 / 模式包络）─────────────────────────────────
 # 把精确签名脆点逐一消解（docs §2.1.2）：
 #   null      → 不携带类型（可空，通配）
